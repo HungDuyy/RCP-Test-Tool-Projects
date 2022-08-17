@@ -1,0 +1,462 @@
+--- RCPTT testcase ---
+Format-Version: 1.0
+Context-Type: org.eclipse.rcptt.ctx.ecl
+Element-Name: BuildTest_Proc
+Element-Type: context
+Element-Version: 2.0
+Id: _hsBGUBpdEequd5J9yLLTvQ
+Runtime-Version: 2.4.3.201909171500
+Save-Time: 2/21/20 11:41 AM
+
+------=_.ecl.context-718f04b4-ed39-33e3-af62-0995e4561998
+Content-Type: text/ecl
+Entry-Name: .ecl.context
+
+proc "create-new-project_CCRX_SC" [val groupName] [val deviceName] [val pinCount] [val targetDevice] [val moduleName] [val bsp_version] {
+	let [val projectName [format "%s_%s_BSP%s_CCRX_SC" $moduleName $targetDevice $bsp_version | invoke replaceAll "\\\\" "\\/" | invoke replaceAll " " "_" | invoke replaceAll "\." "_"]]{
+		get-menu -path "File/New/C\\/C++ Project" | click
+		with [get-window "New C/C++ Project"] {
+		    get-list | select "Renesas RX"
+		    get-table | select [get-item -path "" -index 2]
+		    get-button "Next >" | click
+		}
+		with [get-window -class WizardDialog] {
+		    get-editbox -after [get-label "Project name:"] | set-text $projectName
+		    get-button "Next >" | click
+		    with [get-group "Device Settings" | get-button "..."] {
+		        click
+		        get-menu -path [format "%s/%s/%s - %s/%s" $groupName $deviceName $deviceName $pinCount $targetDevice] | click
+		    }
+		    with [get-group Configurations | get-button] {
+		        check
+		    }
+		    get-button "Next >" | click
+		    get-button ".*Smart Configurator" | check
+		    get-button Finish | click
+		}
+		$projectName
+	}
+}
+
+proc "create-new-project-GCC_SC" [val groupName] [val deviceName] [val pinCount] [val targetDevice] [val moduleName] [val bsp_version] {
+	let [val projectName [format "%s_%s_BSP%s_GCC_SC" $moduleName $targetDevice $bsp_version | invoke replaceAll "\\\\" "\\/" | invoke replaceAll " " "_" | invoke replaceAll "\." "_"]]{
+		get-menu -path "File/New/C\\/C++ Project" | click
+		with [get-window "New C/C++ Project"] {
+		    get-list | select "Renesas RX"
+		    get-table | select [get-item -path "" -index 0]
+		    get-button "Next >" | click
+		}
+		with [get-window -class WizardDialog] {
+		    get-editbox -after [get-label "Project name:"] | set-text $projectName
+		    get-button "Next >" | click
+		    with [get-group "Device Settings" | get-button "..."] {
+		        click
+		        get-menu -path [format "%s/%s/%s - %s/%s" $groupName $deviceName $deviceName $pinCount $targetDevice] | click
+		    }
+		    with [get-group Configurations | get-button] {
+		        check
+		    }
+		    get-button "Next >" | click
+		    get-button ".*Smart Configurator" | check
+		    get-button Finish | click
+		}
+		$projectName
+	}
+}
+
+proc "create-new-project-UnitTest_SC" [val groupName] [val deviceName] [val pinCount] [val targetDevice] [val moduleName] [val bsp_version] {
+	let [val projectName [format "%s_%s_BSP%s_UnitTest_SC" $moduleName $targetDevice $bsp_version | invoke replaceAll "\\\\" "\\/" | invoke replaceAll " " "_" | invoke replaceAll "\." "_"]]{
+		get-menu -path "File/New/C\\/C++ Project" | click
+		with [get-window "New C/C++ Project"] {
+		    get-list | select "Renesas RX"
+		    get-table | select [get-item -path "" -index 2]
+		    get-button "Next >" | click
+		}
+		with [get-window -class WizardDialog] {
+		    get-editbox -after [get-label "Project name:"] | set-text $projectName
+		    get-button "Next >" | click
+		    with [get-group "Device Settings" | get-button "..."] {
+		        click
+		        get-menu -path [format "%s/%s/%s - %s/%s" $groupName $deviceName $deviceName $pinCount $targetDevice] | click
+		    }
+//		    with [get-group Configurations | get-button] {
+//		        check
+			with [get-group Configurations]{
+				get-button | uncheck
+				get-button -after [get-label "Create Hardware Debug Configuration"] | check
+		    }
+		    get-button "Next >" | click
+		    get-button ".*Smart Configurator" | check
+		    get-button Finish | click
+		}
+		$projectName
+	}
+}
+
+proc "display-blocked-FIT" {
+		get-preferences-menu | click
+		with [get-window Preferences] {
+	   		 get-tree | select "C\\/C++/Renesas/Smart Configurator/Component"
+	    	 get-group "Blocked list settings" | get-button "Allow blocked FIT modules to be displayed" | check
+	   		 get-button "Apply and Close" | click
+		}
+}
+
+proc "add-module" [val moduleName] [val module_version]{
+	report-start [format "Add module %s" $moduleName]
+	with [get-editor [format "%s.scfg" $projectName]] {
+	    get-tab-folder | get-tab-item Components | click
+	    get-section | get-button "Add component" | click
+	}
+	with [get-window "New Component"] {
+		get-button "Show only latest version" | uncheck
+		get-editbox -after [get-label Filter] | type-text $moduleName
+		let [val itemCount [get-table | get-property itemCount -raw | int]] {
+			loop [val n 0]{
+				if [$n | lt $itemCount] {
+					with[get-window "New Component" | get-table]{
+						if [get-item -path $moduleName -index $n | get-property "getData().getVersion()" -raw | equals $module_version] {
+							select [get-item -path $moduleName -index $n] | click
+							report-message [format "Module '%s' with version '%s' was added." $moduleName $module_version]
+						} -else {
+							recur[$n | plus 1]
+					 	  }
+					}
+				}-else {
+						try{
+							get-window "New Component" | get-button Cancel | click
+						}
+						throw-error [format "Module '%s' with version '%s' not found in SmartConfig." $moduleName $module_version]
+				  }
+			}
+		}
+	}
+	
+	get-window "New Component" | get-button Finish | click
+//-----------------------------------------------------------------------------------------------------------------	
+	if [ $moduleName | eq "r_dtc_rx"]{
+		with [get-editor [format "%s.scfg" $projectName] | get-section Configure | get-tree] {
+  			select "Configurations /DMAC FIT check " | activate-cell-edit -column 1 -type MouseClickSelection
+    		get-combo | select "DMAC FIT module is not used with DTC FIT module."
+   			apply-cell-edit -deactivate
+   			report-message "Notice: This is r_dtc_rx module. RCPTT turn off DMAC FIT check to build." 
+   		}
+   	}
+//-----------------------------------------------------------------------------------------------------------------   	
+   	if [ $moduleName | eq "r_sci_rx"]{
+		 report-message "Notice: This is 'r_sci_rx' module, can't modify channel automatically, please modify channel later"
+    }
+//-----------------------------------------------------------------------------------------------------------------
+   	if [ $moduleName | eq "r_irq_rx"]{
+   		//count number of IRQ pin
+		global [val IRQpin [get-editor [format "%s.scfg" $projectName] | get-section Configure | get-tree | get-item -path "Resources /ICU " | get-property childCount -raw]] -override
+		loop [val i 0]{
+			if[ $i | eq $IRQpin]{
+			//out loop
+			}-else{
+ 				with [get-editor [format "%s.scfg" $projectName] | get-section Configure | get-tree] {
+		    		select [format "Resources /ICU /IRQ%s.*" $i] | activate-cell-edit -column 1 | click
+		    		apply-cell-edit -deactivate
+				}
+				recur [$i | plus 1]
+			}
+		}
+
+		 report-message "Notice: This is 'r_irq_rx' module, RCPTT select all IRQ pin"
+   	}	
+//-----------------------------------------------------------------------------------------------------------------
+   	report-end
+}
+
+
+proc "add-module-unit-test" [val moduleName] [val module_version]{
+	report-start [format "Add module %s" $moduleName]
+	with [get-editor [format "%s.scfg" $projectName]] {
+	    get-tab-folder | get-tab-item Components | click
+	    get-section | get-button "Add component" | click
+	}
+	with [get-window "New Component"] {
+		get-button "Show only latest version" | uncheck
+		get-editbox -after [get-label Filter] | type-text $moduleName
+		let [val itemCount [get-table | get-property itemCount -raw | int]] {
+			loop [val n 0]{
+				if [$n | lt $itemCount] {
+					with[get-window "New Component" | get-table]{
+						if [get-item -path $moduleName -index $n | get-property "getData().getVersion()" -raw | equals $module_version] {
+							select [get-item -path $moduleName -index $n] | click
+							report-message [format "Module '%s' with version '%s' was added." $moduleName $module_version]
+						} -else {
+							recur[$n | plus 1]
+					 	  }
+					}
+				}-else {
+						try{
+							get-window "New Component" | get-button Cancel | click
+						}
+						throw-error [format "Module '%s' with version '%s' not found in SmartConfig." $moduleName $module_version]
+				  }
+			}
+		}
+	}
+	
+	get-window "New Component" | get-button Finish | click
+//-----------------------------------------------------------------------------------------------------------------	
+	if [ $moduleName | eq "r_dtc_rx"]{
+		with [get-editor [format "%s.scfg" $projectName] | get-section Configure | get-tree] {
+  			select "Configurations /DMAC FIT check " | activate-cell-edit -column 1 -type MouseClickSelection
+    		get-combo | select "DMAC FIT module is not used with DTC FIT module."
+   			apply-cell-edit -deactivate
+   			report-message "Notice: This is r_dtc_rx module. RCPTT turn off DMAC FIT check to build." 
+   		}
+
+		get-editor [format "%s.scfg" $projectName] | get-section Components | get-tree | get-item -path "Startup/Generic/r_bsp" | click
+   		with [get-editor [format "%s.scfg" $projectName] | get-section Configure | get-tree] {
+    		select "Configurations /Heap size " | activate-cell-edit -column 1 -type MouseClickSelection
+    		with [get-editbox] {
+       			set-text "0x1000"
+    		}
+    	apply-cell-edit -deactivate
+   		}
+   	
+   	}
+   	
+   	if [ $moduleName | eq "r_sci_rx"]{
+		 with [get-editor [format "%s.scfg" $projectName] | get-section Configure | get-tree] {
+		    select "Configurations /Use ASYNC mode " | activate-cell-edit -column 1 -type MouseClickSelection
+		    get-combo | select Include
+		    apply-cell-edit -deactivate
+		    select "Configurations /Use SYNC mode " | activate-cell-edit -column 1 -type MouseClickSelection
+		    get-combo | select Include
+		    apply-cell-edit -deactivate
+		    select "Configurations /Use SSPI mode " | activate-cell-edit -column 1 -type MouseClickSelection
+		    get-combo | select Include
+		    apply-cell-edit -deactivate
+		    select "Configurations /Transmit end interrupt " | activate-cell-edit -column 1 -type MouseClickSelection
+	        get-combo | select Enable
+	        apply-cell-edit -deactivate
+		    
+		    if [ $include_channel | not-eq none ] {
+		   	 $include_channel | split -sep "," -trimResults | foreach [val item]{
+				 with [get-editor [format "%s.scfg" $projectName] | get-section Configure | get-tree] {
+						select [format "Configurations /Include software support for channel %s " $item] | activate-cell-edit -column 1 -type MouseClickSelection
+						get-combo | select Include
+						apply-cell-edit -deactivate
+				 }
+			 }
+			}
+			
+			if [$fifo_channel | not-eq none] {
+				$fifo_channel | split -sep "," -trimResults | foreach [val item]{
+				 with [get-editor [format "%s.scfg" $projectName] | get-section Configure | get-tree] {
+						select [format "Configurations /TX\\/RX FIFO for channel %s " $item] | activate-cell-edit -column 1 -type MouseClickSelection
+						get-combo | select Include
+						apply-cell-edit -deactivate
+				 }
+			 }
+			}
+    	}
+    }
+//-----------------------------------------------------------------------------------------------------------------
+   	if [ $moduleName | eq "r_irq_rx"]{
+   		//count number of IRQ pin
+		global [val IRQpin [get-editor [format "%s.scfg" $projectName] | get-section Configure | get-tree | get-item -path "Resources /ICU " | get-property childCount -raw]] -override
+		loop [val i 0]{
+			if[ $i | eq $IRQpin]{
+			//out loop
+			}-else{
+ 				with [get-editor [format "%s.scfg" $projectName] | get-section Configure | get-tree] {
+		    		select [format "Resources /ICU /IRQ%s.*" $i] | activate-cell-edit -column 1 | click
+		    		apply-cell-edit -deactivate
+				}
+				recur [$i | plus 1]
+			}
+		}
+
+		 report-message "Notice: This is 'r_irq_rx' module, RCPTT select all IRQ pin"
+   	}	
+//-----------------------------------------------------------------------------------------------------------------
+   	report-end
+   	Check_Error
+}
+
+proc "save-and-export" {
+	report-start "Export Project"
+	get-eclipse-window | key-type "M1+s"
+	try{
+		get-view "Project Explorer" | get-tree | select [format "%s.*" $projectName] | get-menu -path "Export..." | click
+		with [get-window Export] {
+		    get-tree | select "General/Archive File"
+		    get-button "Next >" | click
+		    get-combo -after [get-label "To archive file:"] | set-text [concat $outputFolder $projectName]
+		    get-button Finish | click	
+		}
+		get-view "Project Explorer" | get-tree | select [format "%s.*" $projectName]  | get-menu -path "Close Project" | click
+		report-message [format "Project has been exported to %s.zip" $projectName]
+	}-catch {
+		report-error "Problem while exporting project"
+	}
+	report-end
+}
+
+proc "open-C-mode" {
+	get-button "Open Perspective" | click
+	with [get-window "Open Perspective"] {
+   		get-table | select "C\\/C\\+\\+ \\(default\\)"
+    	get-button Open | click
+	}
+}
+
+proc "open-Debug-mode" {
+	get-button "Open Perspective" | click
+	with [get-window "Open Perspective"] {
+   		get-table | select Debug
+    	get-button Open | click
+	}
+}					
+
+proc "join" [val strings] {
+	global [val res ""] --override
+	$strings | each [val str] {
+	 	global [val res [concat $res "/" $str]] --override
+	}
+	$res
+}
+
+proc "get-name-and-path" [val projectName] [val values] {
+	let [val fileName [$values | get [$values | get-list-size | minus 1]]] {
+		list $fileName [concat $projectName "/src/smc_gen" [join [$values] | split [concat "/" $fileName] | to-list | get 0]]
+	}
+}
+
+proc "get-files-for-folder-struct-check" [val file] [val module] [val projectName] {
+	global [val folderFiles [list]] -override
+	
+	read-excel-file $file $module | list [get rows] | each [val row] {
+		let [val values [$row | list [get values]]] {
+			global [val folderFiles [$folderFiles | append [get-name-and-path $projectName $values]]] -override
+		}
+	}
+	$folderFiles
+}
+
+proc "read-each-target" [val file] [val sheet]{
+	global [val target [list]] -override
+
+	let [val table [read-excel-file $file $sheet]]{ 
+			$table | list [get rows] | each [val row] {
+				let [val value [$row | list [get values]]]{
+				global [val target [$target | append $value]] -override
+			}
+	}
+}
+	$target
+}
+
+proc "read-each-module" [val file] [val sheet]{
+	global [val module [list]] -override
+
+	let [val table [read-excel-file $file $sheet]]{ 
+			$table | list [get rows] | each [val row] {
+				let [val value [$row | list [get values]]]{
+				global [val module [$module | append $value]] -override
+			}
+	}
+}
+	$module
+}
+
+proc "read-each-channel" [val file] [val sheet]{
+	global [val channel [list]] -override
+
+	let [val table [read-excel-file $file $sheet]]{ 
+			$table | list [get rows] | each [val row] {
+				let [val value [$row | list [get values]]]{
+				global [val channel [$channel | append $value]] -override
+			}
+	}
+}
+	$channel
+}
+
+proc "read-each-bsp" [val file] [val sheet]{
+	global [val bsp_version [list]] -override
+
+	let [val table [read-excel-file $file $sheet]]{
+			$table | list [get rows] | each [val row] {
+				let [val value [$row | list [get values]]]{
+				global [val bsp_version [$bsp_version | append $value]] -override
+			}
+	}
+}
+	$bsp_version
+}
+
+proc "check-folder-structure" [val module] {
+	report-start "Check folder structure"
+	get-eclipse-window | key-type "M1+M2+r"
+	get-files-for-folder-struct-check $folderStructureFile $module $projectName | each [val folder] {
+		get-window "Open Resource" | get-editbox -after [get-label "Enter resource name prefix, path prefix or pattern (?, * or camel case):"] | set-text [$folder | get 0]
+		try {
+			if [get-window "Open Resource" | get-table | get-items | to-list | get-list-size | eq 0]{
+				report-error [format "Error: file %s not founded" [$folder | get 0]]
+			} -else {
+				get-window "Open Resource" | get-table | get-items | foreach [val item] {
+					get-window "Open Resource" | get-table | select $item
+					if [get-window "Open Resource" | get-label [concat $projectName ".*"] | get-property caption -raw | eq [$folder | get 1]] {
+						throw-error "Founded"
+					}
+				}
+				get-window "Open Resource" | get-table | get-items | foreach {
+					report-error [format "Error: file %s expected in %s, but was in %s" [$folder | get 0] [$folder | get 1] [get-window "Open Resource" | get-label [concat $projectName ".*"] | get-property caption -raw]]
+				}
+			}
+		} -error [val e] -catch {
+			if [$e | get-status-message | eq "Founded"] {
+			}
+		}
+	}
+	get-window "Open Resource" | get-button Cancel | click
+	report-end
+}
+
+
+proc "Proc_Add_Sample_Code" [val projectName] [val module] [val outputFolder]
+{
+	with [get-view "Project Explorer"]
+	{
+   		get-tree | select [format "%s \\[HardwareDebug\\]/src" $projectName] | double-click
+		get-tree | select [format "%s \\[HardwareDebug\\]/%s.scfg" $projectName $projectName] | double-click
+	}
+	with [get-editor [format "%s.scfg" $projectName]]
+			{
+  			  get-tab-folder | get-tab-item "Compone.*" | click
+  			  with [get-section Components | get-tree] 
+  			  {
+    		 	 get-item -path [format "Drivers/I\\/O Ports/%s" $module] | click    
+       		   	 select [format "Drivers/I\\/O Ports/%s" $module] | mouse down -button Right | get-menu -path "Download and import sample projects" | click
+       		}
+      	try
+      		{
+    			get-window "Smart Browser" | get-button Yes | click
+			} -catch
+				 	{
+   					 // Verify that the window was missing (and not some other problem)
+   			 		verify-error -command
+   			 					{
+   			 						get-window "Smart Browser"
+   			 					}                          
+					}
+    		  
+			}
+			wait 2000
+			with [get-view "Smart Browser"]
+			 {
+   				 maximize
+   				 AUT_CaptureScreen -imageFolderPath $outputFolder -imageName "Add_Sample_Code"
+   				 restore
+			 }
+			
+}
+
+
+------=_.ecl.context-718f04b4-ed39-33e3-af62-0995e4561998--

@@ -1,0 +1,4 @@
+-----------------------------------------------------------------
+Please replace all the !test folder or create new folder for another devices.
+
+Please make sure all !test folder for each module can be add in project and build without error.

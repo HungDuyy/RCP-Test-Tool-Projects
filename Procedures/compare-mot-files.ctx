@@ -1,0 +1,118 @@
+--- RCPTT testcase ---
+Format-Version: 1.0
+Context-Type: org.eclipse.rcptt.ctx.ecl
+Element-Name: compare-mot-files
+Element-Type: context
+Element-Version: 2.0
+Id: _wWuRQJcgEeivk5w2mpHwLA
+Runtime-Version: 2.4.3.201909171500
+Save-Time: 12/6/19 3:31 PM
+
+------=_.ecl.context-718f04b4-ed39-33e3-af62-0995e4561998
+Content-Type: text/ecl
+Entry-Name: .ecl.context
+
+
+proc "check-output-hex-file" {
+	get-view "Project Explorer" | get-tree | select [format "%s.*" $projectName] | get-menu -path Properties | click
+	with [get-window [format "Properties for %s.*" $projectName]] {
+    	get-tree | select "C\\/C\\+\\+ Build/Settings"
+    	get-tab-folder | get-tab-item "Tool Settings" | click
+    	get-tree -after [get-label Settings] | select "Converter/Output"
+    	get-button "Output hex file" | check
+    	try {
+    		get-button "Apply and Close" | click
+    	}-catch{}
+    	try {
+    		get-button "OK" | click
+    	}-catch{}
+	}
+}
+
+proc "replace-all" [val regex] [val text] {
+	get-menu -path "Search/Search..." | click
+	get-window Search | get-tab-folder | get-tab-item "File Search" | click
+	with [get-window Search] {
+    	get-combo -after [get-label "Containing text:"] | set-text $regex
+    	get-button "Case sensitive" | check
+    	get-button "Regular expression" | check
+	}
+	get-window Search | get-button "Replace..." | click
+	with [get-window "Replace Text Matches"] {
+   		get-combo -after [get-label "With:"] | set-text $text
+    	get-button OK | click
+	}
+	report-message "The minor version was replaced by 77 in all modules"
+}
+
+proc "rename-and-save-mot" [val newName] [val motFile] {
+	get-view "Project Explorer" | get-tree | select [format "%s.*/.*Debug/.*.mot" $projectName] | get-menu -path "Rename..." | click
+	with [get-window "Rename Resource"] {
+    	get-editbox -after [get-label "New name:"] | set-text $newName
+    	get-button OK | click
+	}
+	get-view "Project Explorer" | get-tree | select [format "%s.*/.*Debug/%s" $projectName $newName] | double-click
+	get-editor $newName | get-text-viewer | get-property text -raw | write-lines $motFile
+	report-message [concat "Mot file was saved in " $newName]
+}
+
+proc "report-differences" [val file1] [val file2] {
+	with [get-view "Project Explorer" | get-tree] {
+    	select $file1 $file2
+    	get-menu -path "Compare With/Each Other" | click
+	}
+	try {
+		loop [val i 1] {
+			get-editor "Compare .*" | get-text-viewer -after [get-label [format "%s.*/.*Debug/.*.mot1" $projectName]] -index 1 | get-property "caretPosition.line" -raw
+			get-editor "Compare .*" | get-window | get-object | save-screenshot [format $compareScreenshot $i]
+			get-editor "Compare .*" | get-button "Next Difference" -index 1 | click
+	
+			recur [plus $i 1]
+		}
+	}-catch {}
+
+	with [get-window "End Reached"] {
+    	get-group "Navigation Options" | get-button "Do nothing" | click
+    	get-button OK | click
+	}
+	global [val line 0] -override
+	try {
+		loop [val i 0] {
+			let [val startLine [get-editor "Compare .*" | get-text-viewer | get-property [format "styles[%s].startPos.line" $i] -raw]] {
+				if [$line | not-eq $startLine] {
+					global [val line $startLine] -override
+					report-message [format "The difference in line %s" $line]
+				}
+				
+				let [val endLine [get-editor "Compare .*" | get-text-viewer | get-property [format "styles[%s].endPos.line" $i] -raw]] {
+					if [$line | not-eq $endLine] {
+						global [val line $endLine] -override
+						report-message [format "The difference in line %s" $line]
+					}						
+					recur [plus $i 1]
+				}
+			}
+		}
+	}-catch {}
+}
+
+proc "compare-mot-files" {
+	report-start "Compare mot files"
+
+	check-output-hex-file
+	
+	get-view "Project Explorer" | get-tree | select $projectPath | get-menu -path "Build Project" | click
+	report-build-result [concat $buildConsoleFile "_mot1"]
+	rename-and-save-mot "1.mot1" $motFile1
+	
+	replace-all "VERSION_MINOR\\W*\\(\\d*\\)" [format "VERSION_MINOR           (%s)" 77]
+	
+	get-view "Project Explorer" | get-tree | select $projectPath | get-menu -path "Build Project" | click
+	report-build-result [concat $buildConsoleFile "_mot2"] 
+	rename-and-save-mot "2.mot2" $motFile2
+
+	report-differences [format "%s.*/.*Debug/2.mot2" $projectName] [format "%s.*/.*Debug/1.mot1" $projectName]
+	
+	report-end
+}
+------=_.ecl.context-718f04b4-ed39-33e3-af62-0995e4561998--

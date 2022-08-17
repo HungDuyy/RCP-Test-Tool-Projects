@@ -1,0 +1,179 @@
+--- RCPTT testcase ---
+Format-Version: 1.0
+Context-Type: org.eclipse.rcptt.ctx.ecl
+Element-Name: check-versions
+Element-Type: context
+Element-Version: 2.0
+Id: _oJnIUHRiEeiQLabVBmPqjQ
+Runtime-Version: 2.4.3.201909171500
+Save-Time: 1/10/20 2:02 PM
+
+------=_.ecl.context-718f04b4-ed39-33e3-af62-0995e4561998
+Content-Type: text/ecl
+Entry-Name: .ecl.context
+
+proc "get-smc-gen" {
+	get-view "Project Explorer" | get-tree | get-item -path [format "%s.*/src/smc_gen" $projectName]
+}
+
+proc "get-modules-list" {
+	global [val modules [list]] -override
+	
+	get-smc-gen | double-click
+	repeat -index [val i] -times [get-smc-gen | get-property "getItems().length" -raw | int] -command {
+		let [val module [get-smc-gen | get-property [format "getItems().TreeItem[%d].getText()" $i] -raw | str]] {
+			if [and [$module | not-eq "general"]
+			        [$module | not-eq "r_config"]
+			        [$module | not-eq "r_pincfg"]] {
+				global [val modules [$modules | append $module]] -override
+			}
+		}
+	}
+	
+	$modules
+}
+
+proc "get-ide-version" [val module] {
+	try {
+		with [get-editor [format "%s.scfg" $projectName]] {
+			get-tab-folder | get-tab-item Components | click
+			get-section -index 0 | get-button "Add component" | click
+		}
+
+		global [val version [get-window "New Component" | get-table | get-item -path $module | get-property "values['" +
+			"Version']" -raw]] -override
+	} -error [val e] -catch {
+		global [val version "'IDE's module version wasn't found'"] -override
+	} -finally {
+		get-window "New Component" | close
+
+	}
+	$version
+}
+
+proc "get-workspace-version-from-file" [val fileName] {
+	let [val lines [read-lines [format $fileName] | to-list]] {
+		global [val length [minus [get-list-size $lines] 2]] -override
+		loop [val i 0] {
+			let [val line [$lines | get $i]] {
+				if [$line | contains "VERSION_MAJOR"] {
+					let [val major [get-value-from-parentheses $line]] {
+						global [val version $major] -override
+					}
+				}
+				if [$line | contains "VERSION_MINOR"] {
+					let [val minor [get-value-from-parentheses $line]] {
+						global [val version [format "%s.%s" $version $minor]] -override
+					}
+				} -else {
+					if [$length | lt $i] {
+						global [val version ""] -override
+					} -else {
+						recur [plus $i 1]
+					}
+				}
+			}
+		}
+	}
+	$version
+}
+
+proc "get-workspace-version" [val module] {
+	global [val version [get-workspace-version-from-file [format "workspace:/%s/src/smc_gen/%s/%s_if.h" $projectName $module $module]]] -override
+	if [$version | eq ""] {
+		global [val version [get-workspace-version-from-file [format "workspace:/%s/src/smc_gen/%s/src/%s_private.h" $projectName $module $module]]] -override
+		if [$version | eq ""] {
+			global [val version [get-workspace-version-from-file [format "workspace:/%s/src/smc_gen/%s/src/%s_private_targets.h" $projectName $module $module]]] -override
+			if [$version | eq ""] {
+				global [val version "'Version wasn't found'"] -override
+			}
+		}
+	}
+	$version
+}
+
+proc "check-version-from-GetVersion-API" [val file] {
+	report-start "Check version from GetVersion API"
+	let [val console [get-view "Renesas Debug Virtual Console" | get-editbox | get-property text -raw]] {
+		let [val modules [get-module-names-with-versions $file]] {
+			$console | find-all "Test\\W\\w+\\Wversion:\\W+(\\w+)\\W+([\\w\\d\\.]+)" | to-list | each [val testModule] {
+				let [val testModuleName [format "r_%s_rx" [$testModule | get 1 | invoke toLowerCase]]] {
+					try {
+						$modules | each [val module] {
+							if [$module | get 0 | eq $testModuleName] {
+								let [val version [$testModule | get 2| find-all "\\d*\\.\\d*" | get 0 | float]]
+									[val expected [$module | get 1| find-all "\\d*\\.\\d*" | get 0 | float]] {
+									if [$version | eq $expected] {
+										report-message [format "Correct %s module version %s" [$module | get 0] $version]
+									} -else {
+										report-error [format "Incorrect '%s' module version. Expected %s, but was %s." [$module | get 0] $expected $version]
+									}
+									throw-error "Checked"
+								}
+							}
+						}
+						throw-error [format "Module %s not found in input file" $testModuleName]
+					}-error [val e] -catch {
+						if [$e | get-status-message | contains "Checked" | not] {
+							report-error [$e | get-status-message]
+						}
+					}
+				}
+			}
+		}
+	}
+	report-end
+}
+
+proc "check-versions" {
+	report-start "Check module versions"
+	
+	try {
+		get-view "Project Explorer" | get-tree | select ".*/.*.scfg" | double-click
+		try{
+			get-window "Open Associated Perspective?" | get-button "Open Perspective" | click
+		}-catch{}
+		get-modules-list | each [val module] {
+			try {
+				get-editor ".*.scfg" | get-tab-folder | get-tab-item Overview | click
+				get-editor ".*.scfg" | get-section "Current Configuration" | get-table | get-item -path $module
+			} -catch {
+				report-error [format "Incorrect '%s' module version. Expected %s, but was %s." $module [get-ide-version $module] [get-workspace-version $module]]
+			}
+		}
+	} -error [val e] -catch {
+		try { get-window "New Component" | close } -catch { }
+		report-error [format "Error while checking module versions: %s" [$e | get-status-message]]
+	}
+	report-end
+}
+
+proc "get-module-names-with-versions" [val file] {
+	global [val modules [list]] -override
+	
+	let [val table [read-csv-file $file]] {
+		global [val modules [$modules | append [$table | get columns | to-list]]] -override
+		$table | list [get rows] | each [val row] {
+			let [val module [$row | list [get values]]] {
+				global [val modules [$modules | append $module]] -override
+			}
+		}
+	}
+	$modules
+}
+
+proc "check-module-version" [val module] [val expectedVersion] {
+	report-start "Check module version"
+	let [val version [get-ide-version $module]] {
+		if [$version | float | eq [$expectedVersion | find-all "\\d*\\.\\d*" | get 0 | float]] {
+			report-message [format "Correct '%s' module with version '%s' added." $module $version]
+		} -else {
+			report-error [format "Incorrect '%s' module version. Expected '%s', but was '%s'." $module $expectedVersion $version]
+		}
+	}
+	report-end
+}
+
+
+
+------=_.ecl.context-718f04b4-ed39-33e3-af62-0995e4561998--

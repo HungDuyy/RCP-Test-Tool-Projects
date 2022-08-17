@@ -1,0 +1,158 @@
+--- RCPTT testcase ---
+Format-Version: 1.0
+Context-Type: org.eclipse.rcptt.ctx.ecl
+Element-Name: check-after-build
+Element-Type: context
+Element-Version: 2.0
+Id: _iKVpAMZdEeipP7uDu0Ryhw
+Runtime-Version: 2.4.0.201810152317
+Save-Time: 11/12/18 10:22 AM
+
+------=_.ecl.context-718f04b4-ed39-33e3-af62-0995e4561998
+Content-Type: text/ecl
+Entry-Name: .ecl.context
+
+proc "get-macro" [val def] {
+	format "#ifdef %s\n	macro_values_test(\"defined\", \"%s\", %s);\n#else\n	macro_values_test(\"undefined\", \"%s\");\n#endif\n" $def $def $def $def
+}
+
+proc "wait-for-print" {
+	get-menu -path "Run/Resume" | click
+	try -times 1000 -delay 10 -command {
+		get-view "Renesas Debug Virtual Console" | get-editbox | get-property text -raw | contains "printed" | verify-true
+	} -catch {
+		throw-error "Defined values not printed"
+	}
+}
+
+proc "check-values" [val defVal] [val expVal] {
+	if [get-defined-value [get-view "Renesas Debug Virtual Console" | get-editbox | get-property text -raw] $defVal1 | get 1 | eq $expVal1]{
+		report-message [format "Correct %s define value %s" $defVal $expVal]
+	} -else{
+		report-error [format "Incorrect %s define value. Expected %s, but was %s." $defVal $expVal [get-defined-value [get-view "Renesas Debug Virtual Console" | get-editbox | get-property text -raw | get 1] $defVal]]
+	}
+}
+
+proc "preparation-for-check-after-build" [val file] [val packageMacroNames] [val expectedDevice] [val bspMacroNames] {
+	global [val main 0] -override
+	global [val initialText [read-lines -uri [format "workspace:/%s/src/!test/%s" $projectName $file] | to-list]] -override
+	$initialText | each [val line] {
+		$main | switch [case 0 {
+			global [val main 1] -override
+			if [$bspMacroNames | get-list-size | not-eq 0] {
+				concat "#include \"r_cmt_rx.c\";\n" $line | write-lines -uri [format "workspace:/%s/src/!test/%s" $projectName $file]
+			} -else {
+				$line | write-lines -uri [format "workspace:/%s/src/!test/%s" $projectName $file]
+			}
+		}][case 1 {
+			if [$line | contains "void main("] {
+				global [val main 2] -override
+				concat "static inline void macro_values_test(char* name, ...) {}\n\n" $line | write-lines -uri [format "workspace:/%s/src/!test/%s" $projectName $file] -append
+			} -else{
+				$line | write-lines -uri [format "workspace:/%s/src/!test/%s" $projectName $file] -append
+			}
+		}] [case 2 {
+			global [val main 3] -override
+			$line | write-lines -uri [format "workspace:/%s/src/!test/%s" $projectName $file] -append
+			get-macro $expectedDevice | write-lines -uri [format "workspace:/%s/src/!test/%s" $projectName $file] -append
+			$packageMacroNames | get 0 | each [val v] {
+				get-macro $v | write-lines -uri [format "workspace:/%s/src/!test/%s" $projectName $file] -append
+			}
+			if [$bspMacroNames | get-list-size | not-eq 0] {
+				$bspMacroNames | each [val v] {
+					get-macro [$v | get 0] | write-lines -uri [format "workspace:/%s/src/!test/%s" $projectName $file] -append
+				}
+				get-macro [$bspMacroNames | get 1 | get 1] | write-lines -uri [format "workspace:/%s/src/!test/%s" $projectName $file] -append
+			}
+		}] [case 3 {
+			$line | write-lines -uri [format "workspace:/%s/src/!test/%s" $projectName $file] -append
+		}]      
+	}
+	get-view "Project Explorer" | get-tree | select [format "%s.*" $projectName] | get-menu -path Properties | click
+	with [get-window "Properties for .*"] {
+	    get-tree | select "C\\/C++ Build/Settings"
+	    get-tab-folder | get-tab-item "Tool Settings" | click
+	    get-tree -after [get-label Settings] | select "Compiler/Output"
+	    get-button "Output preprocessed source file" | check
+	    get-button "Apply and Close" | click
+	}
+	if [$bspMacroNames | get-list-size | not-eq 0] {
+		get-view "Project Explorer" | get-tree | select [format "%s.*%s" $projectName $checkBspAllFile] | get-menu -path "Resource Configurations/Exclude from Build..." | click
+		with [get-window "Exclude from build"] {
+		    get-button "Select All" | click
+		    get-button OK | click
+		}
+	}
+}
+
+proc "check-macro-values" [val text] [val macroName] [val macroValue] {
+	let [val values [$text | find-all [format "macro_values_test\\(\"((?:un)?defined)\", \"%s\"(?:, \\(([^;]+)\\))?\\);" $macroName]]] {
+		if [$values | get 1 | eq "defined"]{
+			if [$macroValue | eq "NA"] {
+				report-message [format "Macros %s defined" $macroName]
+			} -else {
+				if [$macroValue | eq [$values | get 2]]{
+					report-message [format "Correct %s define value %s" $macroName [$values | get 2]]
+				} -else {
+					report-error [format "Incorrect %s define value. Expected %s, but was %s" $macroName $macroValue [$values | get 2]]
+				}
+			}
+		} -else {
+			report-error [format "Macros %s undefined" $macroName]
+		}
+	}
+}
+
+proc "check-after-build" [val file] [val packageMacroNames] [val expectedDevice] [val bspMacroNames] {
+	report-start "Check after build"
+	preparation-for-check-after-build [concat $file ".c"] $packageMacroNames $expectedDevice $bspMacroNames
+	
+	try {
+		get-view "Project Explorer" | get-tree | select $projectPath | get-menu -path "Build Project" | click
+		report-build-result [concat $buildConsoleFile "_check_after_build"]
+	} -catch{}
+	
+	get-view "Project Explorer" | get-tree | select [format "%s.*/.*Debug/src/!test/%s.p" $projectName $file] | double-click
+	let [val text [get-editor [format "%s.p" $file] | get-text-viewer | get-property text -raw]] {
+		let [val values [$text | find-all [format "macro_values_test\\(\"((?:un)?defined)\", \"%s\"(?:, \\(([^;]+)\\))?\\);" $expectedDevice]]] {
+			if [$values | get 1 | eq "defined"]{
+				report-message [format "Macros %s defined" $expectedDevice]
+			} -else {
+				report-error [format "Macros %s undefined" $expectedDevice]
+			}
+		}	
+
+		$packageMacroNames | get 0 | each [val name] [val i] {
+			check-macro-values $text $name [$packageMacroNames | get 1 | get $i]
+		}
+
+		if [$bspMacroNames | get-list-size | not-eq 0] {
+			check-macro-values $text [$bspMacroNames | get 0 | get 0] [$bspMacroNames | get 0 | get 1]
+			
+			let [val values [$text | find-all [format "macro_values_test\\(\"((?:un)?defined)\", \"%s\"(?:, \\(([^;]+)\\))?\\);" [$bspMacroNames | get 1 | get 1]]]] {
+				if [$values | get 1 | eq "defined"]{
+					report-message [format "Macros %s define value %s" [$bspMacroNames | get 1 | get 1] [$values | get 2]]
+					check-macro-values $text [$bspMacroNames | get 1 | get 0] [format "(%s)" [$values | get 2]]
+				} -else {
+					report-error [format "Macros %s undefined" [$bspMacroNames | get 1 | get 1]]
+				}
+			}				
+		}
+	}
+	str "" | write-lines -uri [format "workspace:/%s/src/!test/%s.c" $projectName $file]
+	$initialText | each [val line] {
+		$line | write-lines -uri [format "workspace:/%s/src/!test/%s.c" $projectName $file] -append
+	}
+	if [$bspMacroNames | get-list-size | not-eq 0] {
+		get-view "Project Explorer" | get-tree | select [format "%s.*%s" $projectName $checkBspAllFile] | get-menu -path Properties | click
+		with [get-window "Properties for.*"] {
+			get-tree | select "C\\/C\\+\\+ Build/Settings"
+			get-group "" | get-button "Exclude resource from build" | uncheck
+		    get-button Apply | click
+		    get-button "Apply and Close" | click
+		}
+	}
+	report-end
+}
+
+------=_.ecl.context-718f04b4-ed39-33e3-af62-0995e4561998--

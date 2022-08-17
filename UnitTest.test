@@ -1,0 +1,131 @@
+--- RCPTT testcase ---
+Format-Version: 1.0
+Contexts: _1aXbQHQ3EeiQLabVBmPqjQ,_QTw_gCFMEeqhGNdl-82c2g,_Q8ukEHQ4EeiQLabVBmPqjQ,_KTTdEHgqEeiUh7GEerddGQ,_IXScUHgqEeiUh7GEerddGQ,_kRRA8HRmEeiQLabVBmPqjQ,_WhrJgHXcEeiSluh8YCOfjA,_hsBGUBpdEequd5J9yLLTvQ,_3GGREBSxEeqwdYZlXbKnSA
+Element-Name: UnitTest
+Element-Type: testcase
+Element-Version: 3.0
+External-Reference: 
+Id: _grpkoC0YEeqRGvk8mzvepg
+Property-testsTimeout: 500
+Runtime-Version: 2.4.3.201909171500
+Save-Time: 2/21/20 9:49 AM
+Testcase-Type: ecl
+
+------=_.content-0a7243a0-75d3-3d5f-9791-539de0e5b7ac
+Content-Type: text/ecl
+Entry-Name: .content
+
+//declare-variables
+global		[val uncoveredLine $uncoveredLinesFile]
+	   		[val cleanConsole $cleanConsoleFile]
+	   		[val buildConsole $buildConsoleFile]
+	   		[val ErrorWarning $ErrorWarningLogs]
+	   		[val renesasconsole $consoleFile]
+	   		[val projectName ""]
+	   		
+global	[val BuildTestTargetFile [concat $inputFolder $UnitTestBuildTestTargetFile]]
+		[val currentTime [get-time]]
+		-override   		
+global 	[val outputFoldergc [read-excel-file $BuildTestTargetFile "outputFolder" | get-table-cells B1]]
+		-override
+
+global  [val summaryReportFile [concat $outputFoldergc $summaryReportFile]] -override
+
+read-each-target $BuildTestTargetFile "targetdevice" | each [val target] {
+ if [ $target | get 0 | eq targetDevice] {
+ }-else{
+   global [val outputFolder [format "%s%s/" $outputFoldergc [$target | get 0] ]] -override
+   global [val targetDirectory  [$target | get 0 | invoke toLowerCase]] 
+   		  [val monitorRegister  [$target | get 4 ]]
+   		  [val valueRegister  	[$target | get 5 ]]
+   		  [val include_channel 	[$target | get 6 ]]
+   		  [val fifo_channel 	[$target | get 7 ]]
+   		  [val SCI_CH 			[$target | get 8 ]]
+   		  -override
+ //global [val devicePath [format "RX/%s/%s" [$target | get 0]  [$target | get 4]]] -override
+  read-each-bsp $BuildTestTargetFile "bsp_version" | each [val bsp_version] {
+   if [$bsp_version | get 0 | eq bsp_version] {
+   }-else{
+	read-each-module $BuildTestTargetFile "buildModuleNames" | each [val module] {
+	//----------------------
+	Check_Error
+	close_project_with_condition
+	open-C-mode
+	Check_Error
+	//----------
+	  if [ $module | get 0 | eq ModuleName] {
+      }-else{
+      	global  [val moduleName [$module | get 0]] -override
+		global	[val FolderTest [format "%s!test/%s/!test_%s" $inputFolder [$target | get 0] $moduleName]] -override
+		if [ $moduleName | eq "r_dmac_rx"]{
+      		global  [val moduleName "r_dmaca_rx"] -override
+      	}
+		global 	[val projectName [create-new-project-UnitTest_SC [$target | get 3] [$target | get 0] [$target | get 2] [$target | get 1] $moduleName [$bsp_version | get 0]]] -override
+//----------------------------------------------------------------------------------
+		Check_Error
+//----------------------------------------------------------------------------------		
+		global 	[val summary [format "[%s] [%s]\n\n" [$currentTime | format-time "yyyy-MM-dd HH:mm:ss"] $projectName]]
+				[val projectPath [format "%s.*" $projectName]]
+				-override
+		
+		let	[val outputFolder [format "%s%s_%s/" $outputFolder $projectName [$currentTime | format-time "yyyy-MM-dd-HH-mm-ss"]]]
+   		{
+			let	[val reportFile [concat $outputFolder $reportFile]]
+				[val cleanConsoleFile [concat $outputFolder $cleanConsoleFile]]
+	   			[val buildConsoleFile [concat $outputFolder $buildConsoleFile]]
+	   			[val ErrorWarningLogs [concat $outputFolder $ErrorWarningLogs]]
+	   			[val consoleFile [concat $outputFolder $consoleFile]]
+	   			[val coverageShot [concat $outputFolder $coverageScreenshot]]
+	   			[val uncoveredLinesFile [concat $outputFolder $uncoveredLinesFile]] {
+//------------------------------------------------------------------------------------------		     				
+				try {
+					if [get-file -uri $outputFolder | get exists] {
+						delete-file $outputFolder
+					}
+//------------------------------------------------------------------------------------------
+					Check_Error
+					Remove_BSP
+					Generate_Code
+					display-blocked-FIT
+					add-module "r_bsp" [substitute-variables [$bsp_version | get 0] | invoke replaceAll "v" ""] //add BSP with bsp_version
+					Check_Error
+					add-module-unit-test  $moduleName [substitute-variables [$module | get 1] | invoke replaceAll "v" ""]
+					Check_Error
+					Generate_Code
+					Close_scfg
+//------------------------------------------------------------------------------------------					
+					Check_Error
+//------------------------------------------------------------------------------------------										
+					move-test-to-workspace
+					add-directory-unittest
+//------------------ close Save and Launch?-------------------------------------------------					
+					Check_Error
+//------------------------------------------------------------------------------------------							
+					open-Debug-mode
+//------------------close Save and Launch?--------------------------------------------------					
+					Check_Error
+//------------------------------------------------------------------------------------------						
+					off-code-analysis
+					
+					unit-test
+//------------------------------------------------------------------------------------------						
+					Check_Error
+//------------------------------------------------------------------------------------------	
+				} -error [val e] -catch {
+					report-test-error $e
+				} -finally {
+					//stop-debug
+					report-summary
+				}
+			}
+		}
+     }
+    }
+   }
+  }
+ }
+}			
+
+	
+
+------=_.content-0a7243a0-75d3-3d5f-9791-539de0e5b7ac--

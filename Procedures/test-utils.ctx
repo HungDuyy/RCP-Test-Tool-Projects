@@ -1,0 +1,223 @@
+--- RCPTT testcase ---
+Format-Version: 1.0
+Context-Type: org.eclipse.rcptt.ctx.ecl
+Element-Name: test-utils
+Element-Type: context
+Element-Version: 2.0
+Id: _GodY8HR6EeiQLabVBmPqjQ
+Runtime-Version: 2.4.3.201909171500
+Save-Time: 2/12/20 10:47 AM
+
+------=_.ecl.context-718f04b4-ed39-33e3-af62-0995e4561998
+Content-Type: text/ecl
+Entry-Name: .ecl.context
+
+proc "get-markered-lines" {
+	get-editor [format "%s.c" $moduleName] | get-text-viewer | get-property "markers" -raw
+}
+
+proc "get-markered-line" [val index] {
+	get-markered-lines | invoke get $index
+}
+
+proc "get-marker" [val line] [val index] {
+	get-markered-line $line | invoke getValue | invoke get $index
+}
+
+proc "get-list-size" [val input -input] {
+	try {
+		$input | invoke getElements | invoke size
+	} -catch {
+		int 0
+	}
+}
+
+proc "get-last" [val array -input] {
+	$array | get [$array | get-list-size | minus 1]
+}
+
+proc "get-value-from-parentheses" [val line]{
+	$line | list [split "("] | get 1 | list [split ")"] | get 0
+}
+
+proc "contains-number" [val input -input] [val value] {
+	loop [val i 0] {
+		if [$input | get $i | eq $value] {
+			bool true
+		} -else {
+			if [$input | get-list-size | eq [plus $i 1]] {
+				bool false
+			} -else {
+				recur [plus $i 1]
+			}
+		}
+	}
+}
+
+proc "add-report-line" [val message] {
+	$message | write-lines $reportFile -append
+}
+
+proc "report-start" [val message] {
+	global [val reported false]
+	       [val error false]
+	       [val summary [concat $summary $message]] -override
+	add-report-line [format "[%s]\n" $message]
+}
+
+proc "report-message" [val message] {
+	global [val reported true] -override
+	add-report-line [concat "    " $message]
+}
+
+proc "report-error" [val message] {
+	global [val reported true] -override
+	global [val error true] -override
+	add-report-line [concat "    " $message]
+}
+
+proc "report-end" {
+	if [not $reported] {
+		add-report-line "    OK"
+	}
+	add-report-line "-----------------------------------------------------------------"
+	
+	if [$error] {
+		global [val summary [concat $summary ": FAIL"]] -override
+	} -else {
+		global [val summary [concat $summary ": OK"]] -override
+	}
+	global [val summary [concat $summary ";\n\n"]] -override
+}
+
+proc "report-test-error" [val error] {
+	//add-report-line [format "[Error] %s" [$error | get-status-message]]
+	add-report-line "[Error]\n" //RVC
+	report-error  [$error | get-status-message] //RVC
+}
+
+proc "report-summary" {
+	concat $summary "\n" | write-lines -uri $summaryReportFile -append
+}
+
+proc "report-build-result" [val file] [val consolelgs] [val ErrorWarningLogs] {
+	global [val flag false] -override
+	try -times 5 -delay 5000 -command {
+	let [val resultconsole [get-view Console | get-text-viewer | get-property text -raw ]]{
+		$resultconsole | write-lines -uri $file
+	}
+	report-message [format "Console logs are saved to %s\n" $consolelgs]
+	}-catch{
+		report-error "Has fault while getting console logs\n"
+		report-end
+	}
+	
+	try -times 50 -delay 5000 -command {
+//		let [val result [get-view Console | get-text-viewer | get-property text -raw ]]{
+//				$result | write-lines -uri $file
+//			}
+//		report-message [format "Console logs are saved to %s\n" $consolelgs]
+		
+		let [val result [get-view Console | get-text-viewer | get-property text -raw | invoke replaceAll ".*\n" ""]] {
+			if [or [$result | contains "Build Finished"] [$result | contains "Build Failed"]] {
+				
+				report-message [format "Result: %s\n" $result]
+				
+				if [$result | contains " 0 warnings"] {
+					} -else {
+							try {
+								to-clipboard "[Warning Logs]:\n"
+								from-clipboard | write-lines -uri $ErrorWarningLogs -append
+								get-view Problems | get-tree | select "Warning.*" | get-menu -path Copy | click
+								from-clipboard | write-lines -uri $ErrorWarningLogs -append
+								to-clipboard "-----------------------------------------------------------------"
+								from-clipboard | write-lines -uri $ErrorWarningLogs -append
+					 			report-message [format "Warning logs are saved to %s\n" $ErrorWarning]
+							} -catch {
+								report-message [format "Problem while getting warning logs\n"]
+								}
+				}
+				
+				if [$result | contains "Build Failed"] {
+					global [val flag true] -override
+					try {
+						to-clipboard "[Error Logs]:\n"
+						from-clipboard | write-lines -uri $ErrorWarningLogs -append
+						get-view Problems | get-tree | select "Error.*" | get-menu -path Copy | click //key-type "M1+c"//
+						from-clipboard | write-lines -uri $ErrorWarningLogs -append
+						to-clipboard "-----------------------------------------------------------------"
+						from-clipboard | write-lines -uri $ErrorWarningLogs -append
+						report-error [format "Error logs are saved to %s\n" $ErrorWarning]
+						report-end
+					}-catch {
+						report-message [format "Problem while getting error logs\n"]
+						}
+				}
+	
+				
+			} -else {
+				throw-error "Cannot Build project"// force next wait-and-try operation
+			}
+		}
+	} -catch {
+		report-error "Has fault while check Build results\n"
+		report-end
+	}
+	if [$flag] {
+		get-eclipse-window | key-type "M1+s"
+		get-view "Project Explorer" | get-tree | select [format "%s.*" $projectName]  | get-menu -path "Close Project" | click
+		throw-error "Build Failed"
+	}
+}
+
+proc "declare-variables" {
+	//global variables for set name out in report.txt
+	global	[val uncoveredLine $uncoveredLinesFile]
+	   		[val cleanConsole $cleanConsoleFile]
+	   		[val buildConsole $buildConsoleFile]
+	   		[val ErrorWarning $ErrorWarningLogs]
+	   		[val renesasconsole $consoleFile]
+	   		-override
+	// global variables
+	global [val projectPath [format "%s.*" $projectName]]
+	       [val currentTime [get-time]]
+	       -override
+
+	// input parameters
+	global //[val includeDirFile [concat $inputFolder $UnitTestIncludeDirFile]]
+	       [val unityFile [concat $inputFolder $unityFile]]
+	       //[val inputStaticTest [concat $inputFolder $inputStaticTest]]
+	       //[val staticModuleNamesFile [concat $inputFolder $staticModuleNamesFile]]
+	       //[val getVersionFile [concat $inputFolder $getVersionFile]]
+	       -override
+	
+	// output parameters
+	//global [val outputFolder [format "%s%s" [substitute-variables "${system_property:user.home}" | invoke replaceAll "\\\\" "\\/" | invoke replaceAll " " "%20"] $outputFolder]] -override
+	global [val summary [format "[%s] [%s]\n\n" [$currentTime | format-time "yyyy-MM-dd HH:mm:ss"] $projectName]]
+	       [val summaryReportFile [concat $outputFolder $summaryReportFile]]
+	       [val outputFolder [format "%s%s_%s/" $outputFolder $projectName [$currentTime | format-time "yyyy-MM-dd-HH-mm-ss"]]]
+	       -override
+	// output parameters
+	global [val reportFile [concat $outputFolder $reportFile]]
+	       //[val coverageScreenshot [concat $outputFolder $coverageScreenshot]]
+	       [val uncoveredLinesFile [concat $outputFolder $uncoveredLinesFile]]
+	       [val cleanConsoleFile [concat $outputFolder $cleanConsoleFile]]
+	       [val buildConsoleFile [concat $outputFolder $buildConsoleFile]]
+	       [val consoleFile [concat $outputFolder $consoleFile]]
+	       //[val compareScreenshot [concat $outputFolder $compareScreenshot]]
+	       //[val motFile1 [concat $outputFolder $motFile1]]
+	       //[val motFile2 [concat $outputFolder $motFile2]]
+	       [val ErrorWarningLogs [concat $outputFolder $ErrorWarningLogs]]
+	       -override
+	
+//	if [get-file -uri $outputFolder | get exists] {
+//		delete-file $outputFolder
+//	}
+	
+	// for some commands we need an absolute path
+	//global [val memoryFile [substitute-variables [$memoryFile | invoke replace "workspace:" "${workspace_loc}"]]]
+	      // [val coverageScreenshot [substitute-variables [$coverageScreenshot | invoke replace "workspace:" "${workspace_loc}"]]]
+	      // -override
+}
+
+------=_.ecl.context-718f04b4-ed39-33e3-af62-0995e4561998--

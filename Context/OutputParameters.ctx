@@ -1,0 +1,29 @@
+--- RCPTT testcase ---
+Format-Version: 1.0
+Context-Type: org.eclipse.rcptt.ctx.parameters
+Element-Name: OutputParameters
+Element-Type: context
+Element-Version: 2.0
+Id: _IXScUHgqEeiUh7GEerddGQ
+Runtime-Version: 2.4.3.201909171500
+Save-Time: 1/7/20 3:08 PM
+
+------=_.parameters.context-2e023de5-3294-36a9-ac1d-6701f05a40ee
+Content-Type: text/properties
+Entry-Name: .parameters.context
+
+#Tue Jan 07 15:08:14 ICT 2020
+uncoveredLinesFile=branched-uncovered_Lines.txt
+reportFile=report.txt
+compareScreenshot=compare%s.png
+coverageScreenshot=coverage.png
+summaryReportFile=summary-report.txt
+cleanConsoleFile=e2-console_Clean_Logs.txt
+ErrorWarningLogs=error-warning_Build_Logs.txt
+buildConsoleFile=e2-console_Build_Logs.txt
+motFile2=mot2.mot
+outputFolder=D\:/UnitTest_Output/
+motFile1=mot1.mot
+consoleFile=renesas-console_Logs.txt
+
+------=_.parameters.context-2e023de5-3294-36a9-ac1d-6701f05a40ee--

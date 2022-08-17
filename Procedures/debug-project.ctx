@@ -1,0 +1,667 @@
+--- RCPTT testcase ---
+Format-Version: 1.0
+Context-Type: org.eclipse.rcptt.ctx.ecl
+Element-Name: debug-project
+Element-Type: context
+Element-Version: 2.0
+Id: _kd7qUHRuEeiQLabVBmPqjQ
+Runtime-Version: 2.4.3.201909171500
+Save-Time: 2/19/20 9:20 AM
+
+------=_.ecl.context-718f04b4-ed39-33e3-af62-0995e4561998
+Content-Type: text/ecl
+Entry-Name: .ecl.context
+
+proc "set-toolchain" {
+	get-view "Project Explorer" | get-tree | select [format "%s.*" $projectName] | get-menu -path Properties | click
+	with [get-window [format "Properties for %s.*" $projectName]] {
+	    get-tree | select "C\\/C++ Build/Settings"
+	    get-tab-folder | get-tab-item Toolchain | click
+	    with [get-group "Change Toolchain.*" -after [get-label Settings] -index 1] {
+	        get-combo -after [get-label "Toolchain:"] | select "Renesas CCRX"
+	    }
+	    get-button "Apply and Close" | click
+	}	
+}
+
+proc "clean-project" [val file] [val consolelgs] {
+	report-start "Clean Project"
+	get-view "Project Explorer" | get-tree | select $projectPath | get-menu -path "Clean Project" | click
+	try -times 10 -delay 1000 -command {
+		get-view Console | get-text-viewer | get-property text | equals "" | verify-false
+		report-build-result $file $consolelgs
+	} -catch {
+		report-message "New project, nothing to clean"
+	}
+	report-end
+}
+
+proc "build-project" [val file] [val consolelgs] [val ErrorWarningLogs] {
+	report-start "Build Project"
+	get-menu -path "Window/Show View/Other..." | click
+	get-window "Show View" | get-tree | select "General/Problems" | double-click
+	with [get-view Problems | get-tree] {
+    	if[get-property itemCount -raw | eq 0] {
+     	}-else {
+      		select ".*" | get-menu -path "Select All" | click
+     		if [get-menu -path Delete | get-property enablement -raw | equals true]{
+     		 	get-menu -path Delete | click
+			}
+		}
+	}
+	if [get-window ".*" | get-property title -raw | equals "Delete Selected Entries"]{
+		get-window "Delete Selected Entries" | get-button Yes | click
+	}
+	
+	get-view "Project Explorer" | get-tree | select $projectPath | get-menu -path "Build Project" | click
+	report-build-result $file $consolelgs $ErrorWarningLogs
+	report-end
+}
+
+proc "debug-project" [val device] {
+	get-menu -path "Run/Debug Configurations..." | click
+	with [get-window "Debug Configurations"] {
+	    get-tree | select "Renesas Simulator Debugging (RX, RL78)"
+	    get-button "New launch configuration" | click
+	    
+	    get-button "Browse..." | click
+	    with [get-window "Project Selection"] {
+	        get-table | select $projectName
+	        get-button OK | click
+	    }
+	    
+	    get-button "Search Project..." | click
+	    get-window "Program Selection" | get-table | select [format "%s.x" $projectName] | click -default
+	    
+	    get-tab-folder | get-tab-item Debugger | click
+	    get-combo -after [get-label "Debug hardware:"] | select "RX Simulator"
+	    with [get-window "Debug Configurations" | get-button "..."] {
+		    click
+		    get-menu -path $device | click
+		}
+	    
+	    get-tab-folder | get-tab-item Startup | click
+	    get-group "Runtime Options" | get-button "Set breakpoint at:" | uncheck
+	    
+	    get-button Apply | click
+	    get-button Debug | click
+	}
+	try {
+		get-window "Confirm Perspective Switch" | get-button Yes | click
+	} -catch{}
+	wait 1000
+}
+
+proc "debug-New-project" {
+	//get-button "Launch in 'Debug' mode" | click
+//	try {
+//		get-window "Confirm Perspective Switch" | get-button Yes | click
+//	} -catch{}
+	get-menu -path "Run/Debug Configurations..." | click
+	get-window "Debug Configurations" | get-tree | select [format "Renesas Simulator Debugging (RX, RL78)/%s Debug" $projectName]   
+	with [get-window "Debug Configurations"]{
+	get-tab-folder | get-tab-item Startup | click
+	get-group "Runtime Options" | get-button "Set breakpoint at:" | uncheck
+	    
+	    get-button Apply | click
+	    //get-button Debug | click
+	    get-button Close | click
+	    }
+	    
+ 		get-button "Launch in 'Debug' mode" | click
+	   try {
+		get-window "Confirm Perspective Switch" | get-button Yes | click
+	} -catch{}
+	  if [get-window ".*" | get-property title -raw | equals "Launcher"]{
+ 			get-window "Launcher" | get-button Yes | click
+ 		}
+	
+}
+
+proc "hardware-debug-project" {
+	get-menu -path "Run/Debug Configurations..." | click
+	with [get-window "Debug Configurations"] {
+		try {
+			get-tree | select "Renesas GDB Hardware Debugging/.*"
+		}-catch {
+			get-tree | select "Renesas GDB Hardware Debugging" | get-menu -path New | click
+			get-tree | select "Renesas GDB Hardware Debugging/.*"
+		}
+		get-button "Search Project..." | click
+		with [get-window "Program Selection"] {
+			get-table | select ".*.x"
+			get-button OK | click
+		}
+		get-tab-folder | get-tab-item Debugger | click
+		get-combo -after [get-label "Debug hardware:"] | select $debugHardware
+
+		with [get-button "..."] {
+			click
+			get-menu -path $devicePath | click
+			click
+		}
+		get-tab-folder | get-tab-item "Connection Settings" | click
+
+ 		with [get-tree -after [get-label "Target Device:"]] {
+ 			get-editbox | set-text $extalFrequency
+ 			get-button "..." | click
+		}
+
+		with [get-window -class EmulatorSelectionDialog] {
+	        get-button "Auto Select" | uncheck
+	        get-table | select $emulatorName -column "Serial Number/ID" | double-click
+			get-button OK | click
+	    }	
+			
+		with [get-tree -after [get-label "Target Device:"]] {
+ 			if [$productName | invoke toUpperCase | eq "RX65N"] {
+ 				get-combo -index 6 | select No
+ 			}-else {
+ 				get-combo -index 6 | select Yes
+ 			}
+		}
+
+
+		get-tab-folder | get-tab-item Startup | click
+
+		get-group "Runtime Options" | get-button "Set breakpoint at:" | uncheck
+
+		get-button Apply | click
+		get-button Debug | click	    
+	}
+
+}
+
+proc "get-line-number-with-subline" [val file] [val subline] {
+	global 	[val index 1]
+			[val firstLine 0]
+			[val secondLine 0] -override
+	read-lines -uri [format "workspace:/%s/src/!test/%s" $projectName $file] | to-list | each [val line] {
+		if [$line | contains $subline] {
+			global [val firstLine $index] -override
+		} -else {
+			if[and[$firstLine | not-eq 0][$secondLine | eq 0]]{
+				if[$line | invoke replaceAll "\W" "" | not-eq ""] {
+					global [val secondLine $index] -override
+				}
+			}
+		}
+		global [val index [$index | plus 1]] -override
+	}
+}
+
+proc "set-breakpoint" [val file] [val line] {
+
+	get-view "Project Explorer" | get-tree | select [format "%s/src/!test/%s" $projectPath $file] | double-click
+	if [$secondLine | not-eq 0]{
+		get-editor $file | get-left-ruler | get-ruler-column AnnotationColumn | double-click-ruler $line
+	}-else{
+			throw-error "Can't set breakpoint at the line %s inside 'test_main.c'\nPlease put something to line %s to set breakpoint, exp: 'printf(\"TEST DONE!!!\\n\")\;' " $secondLine $secondLine
+		}
+}
+
+proc "monitor-address" [val address] [val file] {
+	get-view Memory | get-button "Add Memory Monitor" | click
+	with [get-window "Monitor Memory"] {
+	    get-combo -after [get-label "Enter address or expression to monitor:"] | set-text [format "0x%08x" $address]
+	    get-button OK | click
+	}
+	
+	get-view Memory | get-button Import | click
+	with [get-window "Import Memory"] {
+	    get-combo -after [get-label "Format:"] | select "RAW Binary"
+	    get-editbox -after [get-label "Restore to address:"] | set-text [format "0x%08x" $address]
+	}
+	set-dialog-result File $file
+	with [get-window "Import Memory"] {
+	    get-button "Browse..." | click
+	    get-button OK | click
+	}
+}
+
+proc "monitor-register" {
+
+	get-view "IO Registers" | get-button Find | click
+	with [get-window "Find IO Register"] {
+   	 	get-editbox -after [get-label "Find:"] | set-text $monitorRegister
+   		get-button "Find Next" | click
+   	 	get-button Close | click
+	}
+
+	with [get-view "IO Registers" | get-tree] {
+   		 select [format "SYSTEM/%s" $monitorRegister] | activate-cell-edit -column 1
+   		 //get-editbox | set-text [format "0x%02x" $hexvalue]
+   		 get-editbox | set-text $valueRegister
+   		 apply-cell-edit -deactivate
+	}
+
+}
+
+proc "setup-coverage" {
+		if [get-view "Renesas Coverage" | get-button "Turn Coverage On/Off" | get-property selected -raw | eq false] {
+			get-view "Renesas Coverage" | get-button "Turn Coverage On/Off" | click
+		}
+		
+		get-view "Renesas Coverage" | get-tab-folder | get-tab-item "Source Coverage" | click
+		
+		with [get-view "Renesas Coverage" | get-tree] {
+		    try -command { select "/Source Files/.*" | get-menu -path "Delete File" | click } -catch { }
+		    try -command { select "/Address Ranges/.*" | get-menu -path "Delete Range" | click } -catch { }
+		}
+		
+		get-view "Renesas Coverage" | get-tree | get-menu -path "Add Range" | click
+		//get-window "Add Range" | get-combo -after [get-label "Start Address"] |set-text "0x0" //
+		with [get-window "Add Range"] {
+			get-combo -after [get-label "Start Address"] | set-text "0x000000" //
+			get-combo -after [get-label "End Address"] | set-text "0x003fffff" //
+		    get-button Add | click
+		    get-button Close | click
+		}
+		
+		set-dialog-result File [format "platform:/resource/%s/src/smc_gen/%s/src/%s.c" $projectName $moduleName $moduleName]
+		get-view "Renesas Coverage" | get-tree | get-menu -path "Add File" | click
+}
+	
+proc "resume-debug" {
+	  if [$moduleName | eq "r_sci_rx"]{
+        wait 1000
+        try{
+            get-menu -path "Run/Resume" | click
+        }
+        if [get-button Suspend | get-property enablement -raw | equals true]{
+            try{
+                get-button Suspend | click
+            }
+        }
+        wait 1000        
+
+ 
+
+//------------------------------------------------------------------------    //At line 1845: Set hdl->rom->regs->SSR.BYTE to 0xC8        
+            with [get-view "IO Registers" | get-tree] {
+                    //-----------------------------------------
+                           try -times 3 -delay 500 -command{
+                               select [format "SCI%s/SSR" $SCI_CH] | activate-cell-edit -column 1 -type MouseClickSelection
+                        }
+                        get-editbox | set-text "0xC8"
+                        apply-cell-edit -deactivate                   
+                }
+                if [get-button "Resume (F8)"  | get-property enablement -raw | equals true]{
+                    get-button "Resume (F8)" | click
+                }
+                wait 1000
+                get-view "Renesas Debug Virtual Console" | get-editbox | key-type Enter
+                wait 1000
+                if [get-button Suspend | get-property enablement -raw | equals true]{
+                get-button Suspend | click
+                }
+                wait 1000        
+//-------------------------------------------------------- while (0 == hdl->rom->regs->SSR.BIT.TEND)
+                with [get-view "IO Registers" | get-tree] {
+                    //-----------------------------------------
+                           try -times 3 -delay 500 -command{
+                               select [format "SCI%s/SSR/TEND" $SCI_CH] | activate-cell-edit -column 2 -type MouseClickSelection
+                        }
+                        get-editbox | set-text 1
+                        apply-cell-edit -deactivate
+                }
+                if [get-button "Resume (F8)"  | get-property enablement -raw | equals true]{
+                    get-button "Resume (F8)" | click
+                }
+                wait 1000
+                get-view "Renesas Debug Virtual Console" | get-editbox | key-type Enter
+                wait 1000
+                if [get-button Suspend | get-property enablement -raw | equals true]{
+	                try{
+	                	get-button Suspend | click
+	                }
+                }
+                wait 1000        
+//--------------------------------------------------------set fifo CF each CH            
+         if [$fifo_channel | not-eq "none"]{
+                $fifo_channel | split -sep "," -trimResults | foreach [val item]{
+                with [get-view "IO Registers" | get-tree] {
+                    try -times 4 -delay 500 -command{
+                        select [format "SCI%s/SSRFIFO" $item] | activate-cell-edit -column 1 -type MouseClickSelection
+                    }
+                    get-editbox | set-text "0xcf"
+                    apply-cell-edit -deactivate
+                }
+                if [get-button "Resume (F8)"  | get-property enablement -raw | equals true]{
+                    get-button "Resume (F8)" | click
+                }
+                wait 1000
+                get-view "Renesas Debug Virtual Console" | get-editbox | key-type Enter
+                wait 1000
+                if [get-button Suspend | get-property enablement -raw | equals true]{
+                    try{
+                        get-button Suspend | click
+                    }
+                    }
+                wait 2000
+                }                    
+            }
+        
+        try -times 500 -delay 200 -command {
+            get-menu -path "Run/Resume" | get-property enablement | equals true | verify-true
+        } -catch {
+            throw-error "Too long tests execution"
+        }
+    }-else{
+    wait 1000
+        try{
+        get-menu -path "Run/Resume" | click
+        }
+        try -times 500 -delay 200 -command {
+            get-menu -path "Run/Resume" | get-property enablement | equals true | verify-true
+        } -catch {
+            throw-error "Too long tests execution"
+        }
+    }
+}
+
+proc "resume-debug-waiting-for-completion" {
+	get-menu -path "Run/Resume" | click
+	get-view "Renesas Debug Virtual Console" | click
+	global [val maximumTestWaitingTime [$maximumTestWaitingTime | int]] -override
+	try -times $maximumTestWaitingTime -delay 1000 -command {
+		let [val console [get-view "Renesas Debug Virtual Console" | get-editbox | get-property text -raw]] {
+			if [$console | matches "[\\W\\w]+\\d+\\W+Tests\\W+\\d+\\W+Failures\\W+\\d+\\W+Ignored[\\W\\w]+" | not]{
+				throw-error
+			}
+		}
+	} -catch {
+		throw-error "Too long tests execution"
+	}
+}
+
+proc "get-uncovered-lines" {
+	global [val lineNumbers [list]]
+		   [val branchedNumbers [list]]
+	       [val lines [list]]
+		   -override	
+	get-view "Project Explorer" | get-tree | select [format "%s/src/smc_gen/%s/src/%s.c" $projectPath $moduleName $moduleName] | double-click
+	let [val markersCount [get-markered-lines | invoke size]] {
+		repeat -index [val i] -times $markersCount -command {
+			let [val lineMarkersCount [get-markered-line $i | invoke getValue | invoke size]] {
+				repeat -index [val j] -times $lineMarkersCount -command {
+					if [and [get-marker $i $j | invoke getType | eq "com.renesas.cdt.debug.coverage.lineUnCoverAnnotationType"]
+					        [get-marker $i $j | invoke getText | eq "Not Covered"]] {
+						let [val lineNumber [get-marker $i $j | invoke getLine]] {
+							global [val lineNumbers [$lineNumbers | append $lineNumber]] -override
+						}
+					}
+					if [and [get-marker $i $j | invoke getType | eq "com.renesas.cdt.debug.coverage.lineBranchedAnnotationType"]					
+					   		[get-marker $i $j | invoke getText | eq "Branched"]] {
+						let [val lineNumber [get-marker $i $j | invoke getLine]] {
+							global [val branchedNumbers [$branchedNumbers | append $lineNumber]] -override
+						}
+					}
+				} 
+			}
+		}
+	}
+	
+	let [val fileLines [read-lines -uri [format "workspace:/%s/src/smc_gen/%s/src/%s.c" $projectName $moduleName $moduleName] | to-list]] {
+		if [get-list-size $lineNumbers | gt 0] {
+			global [val lines [$lines | append "[Uncovered lines]:"]] -override
+			global [val lines [$lines | append "-----------------"]] -override
+			repeat -index [val i] -times [get-list-size $fileLines] -command {
+				if [$lineNumbers | contains-number [plus $i 1]] {
+					let [val line [format "[%03d] %s" [plus $i 1] [$fileLines | get $i]]] {
+						global [val lines [$lines | append $line]] -override
+						global [val lines [$lines | append "-----------------------------------------------------------------"]] -override
+					}
+				}
+			}
+		}
+		if [get-list-size $branchedNumbers | gt 0] {
+			global [val lines [$lines | append "\n[Branched lines]:"]] -override
+			global [val lines [$lines | append "---------------"]] -override
+			repeat -index [val i] -times [get-list-size $fileLines] -command {
+				if [$branchedNumbers | contains-number [plus $i 1]] {
+					let [val line [format "[%03d] %s" [plus $i 1] [$fileLines | get $i]]] {
+						global [val lines [$lines | append $line]] -override
+						global [val lines [$lines | append "-----------------------------------------------------------------"]] -override
+					}
+				}
+			}
+		}
+	}
+	$lines
+}
+
+proc "test-coverage" [val pic] [val file] {
+	report-start "Test Coverage"
+	
+	try -times 100 -delay 100 -command {
+		get-view "Renesas Coverage" | get-tree | get-item -path [format ".*/Source Files/%s.c" $moduleName] | get-property "getData().getColumnHeaderResults()" | equals "0.0" | verify-false
+	} -catch {
+	}
+	
+	let [val coverage [get-view "Renesas Coverage" | get-tree | get-item -path [format ".*/Source Files/%s.c" $moduleName]
+	    | get-property "getData().getColumnHeaderResults()" -raw | float]] {
+		report-message [format "Source Coverage for '%s.c' file: %.2f%%\n" $moduleName $coverage]
+		report-message "Will take a lot time to checking uncovered lines. Wait until process done\n"
+		//-------------------------------------------------
+		if [$coverage | not-eq [float 100]] {
+			let [val lines [get-uncovered-lines]] {
+				$lines | each [val line] {
+					$line | write-lines $file -append
+				}
+				if [get-list-size $lineNumbers | gt 0] {
+					report-error [format "Uncovered lines are saved to %s\n" $uncoveredLine]
+				}
+				if [get-list-size $branchedNumbers | gt 0] {
+					report-message [format "Branched lines are saved to %s\n" $uncoveredLine]
+				}
+			}
+		}
+		//---------------------------------------------------
+	}
+	get-view "Renesas Coverage" | get-tab-folder | get-tab-item "Source Coverage" | click
+	get-view "Renesas Coverage" | get-tree | get-object | save-screenshot $pic
+	report-message [format "Screenshot is save to %s\n" $coverageScreenshot]
+	
+	with [get-view "Renesas Coverage" | get-tree] {
+	    try -command { select ".*/Source Files/.*" | get-menu -path "Delete File" | click } -catch { }
+	    try -command { select ".*/Address Ranges/.*" | get-menu -path "Delete Range" | click } -catch { }
+	}
+	report-end
+}
+
+proc "clear-console" {
+	get-view "Renesas Debug Virtual Console" | click
+	if [get-button "Enable/Disable Renesas Debug Virtual Console"  | get-property selected -raw | eq false]{ 
+	get-button "Enable/Disable Renesas Debug Virtual Console" | click
+	}
+	if [get-view "Renesas Debug Virtual Console" | get-button "Clear Renesas Debug Virtual Console" | get-property enablement -raw | eq true] {
+		get-view "Renesas Debug Virtual Console" | get-button "Clear Renesas Debug Virtual Console" | click
+	}
+}
+
+proc "renesas-console" [val file] {
+	report-start "Renesas Console"
+	
+	get-view "Renesas Debug Virtual Console" | click
+	
+	let [val console [get-view "Renesas Debug Virtual Console" | get-editbox | get-property text -raw]] {
+		$console | list [split "\n"] | each [val line] {
+			if [and [$line | contains "Tests"]
+			        [$line | contains "Failures"]
+			        [$line | contains "Ignored"]] {
+				report-message [format "Result: %s\n" $line]
+			}
+			$line | write-lines -uri $file -append
+//			if [and [$line | contains "TEST"]
+//					[or [$line | contains "FAIL"]
+//						[$line | contains "IGNORE"]]]{
+//				report-message $line
+//			}
+		}
+		report-message [format "Renesas console logs are saved to %s\n" $renesasconsole]
+	}
+	report-end
+}
+
+proc "stop-debug" {
+	try { get-button "Terminate (M1+F2)" | click } -catch { }
+}
+
+proc "generate-code" {
+	get-editor ".*.scfg" | get-button "Generate Code" | click
+	try {
+		get-window "Code Generating" | get-button Yes | click
+	}-catch{}
+}
+
+proc "remove-modules" [val modules] {
+	report-start "Remove older module version"
+	get-view "Project Explorer" | get-tree | select ".*/.*.scfg" | double-click
+	$modules | each [val m] {
+		get-editor ".*.scfg" | get-tab-folder | get-tab-item Overview | click
+		try {
+			let [val oldversion [get-editor ".*.scfg" | get-section "Current Configuration" | get-table | get-item -path [$m | get 0] | get-property "values['Version']" -raw]] {
+				get-editor ".*.scfg" | get-tab-folder | get-tab-item Components | click
+			    get-section | get-editbox| set-text [$m | get 0]
+			    if[get-editor ".*.scfg" | get-section | get-tree | get-property itemCount -raw | not-eq 0] {
+			    	get-editor ".*.scfg" | get-section | get-tree | get-item -path [format ".*/.*/%s" [$m | get 0]] | click
+			    	get-button "Remove component" | click
+			    	get-window Question | get-button Yes | click
+			    }
+			    report-message [format "Module %s version %s was removed" [$m | get 0] $oldversion]
+		    }
+	    }-catch {
+	    	report-error [format "Module %s is not removed, because it wasn't found" [$m | get 0]]
+	    }
+    }
+	generate-code
+	report-end
+}
+
+proc "add-modules" [val modules]  {
+	report-start "Add module"
+	get-view "Project Explorer" | get-tree | select ".*/.*.scfg" | double-click
+	with [get-editor ".*.scfg"] {
+		get-tab-folder | get-tab-item Components | click
+		$modules | each [val m] {
+			try {
+				get-section | get-button "Add component" | click
+				with [get-window "New Component"] {
+			   		get-button "Show only latest version" | uncheck
+			   		get-link "<a>Configure general settings...</a>" | click-link
+		   		    with [get-window Preferences] {
+				        with [get-group "Blocked list settings" | get-button "Allow blocked FIT modules to be displayed"] {
+				            uncheck
+				            check
+				        }
+				        get-button "Apply and Close" | click
+				    }
+					get-editbox -after [get-label Filter] | type-text [$m | get 0]
+				    
+				    let [val itemCount [get-table | get-property itemCount -raw | int]] {
+						loop [val index 0] {
+						    if [$index | lt $itemCount] {
+						    	let [val v [get-window "New Component" | get-table | get-property [format "getItems().TableItem[%s].getData().getVersion()" $index] -raw]] {
+						    		if [$v | find-all "\\d+\\.\\d+" | get 0 | eq [$m | get 1 | find-all "\\d+\\.\\d+" | get 0]] {
+						    		    get-window "New Component" | get-table | select [get-item -path [$m | get 0] -index $index] | double-click    
+						    		} -else {
+						    		   recur [$index | plus 1]
+						    		}
+						    	}
+						    } -else {
+						    	report-error [format "Module %s with version %s not founded" [$m | get 0] [$m | get 1]]
+						    }
+						}
+					}
+				    get-button Finish | click
+				}
+				report-message [format "Module %s version %s was added" [$m | get 0] [$m | get 1]]
+			}-catch {
+				report-error [format "Module %s version %s wasn't added" [$m | get 0] [$m | get 1]]
+			}
+		}
+	}
+
+	generate-code
+	report-end
+}
+
+proc "add-directory-unittest" {
+			get-view "Project Explorer" | get-tree | select [format "%s.*" $projectName] | get-menu -path Properties | click
+					with [get-window [format "Properties for %s" $projectName]] {
+   						get-tree | select "C\\/C\\+\\+ Build/Settings" | double-click
+   						get-tab-folder | get-tab-item "Tool Settings" | click
+					    get-tree -after [get-label Settings] | select "Compiler/Source"
+					    get-button "Add..." | click
+					    with [get-window "Add directory path"] {
+					        get-editbox -after [get-label "Directory:"] | set-text "${workspace_loc:/${ProjName}/src/!test}"
+					        get-button OK | click
+					    }
+					    
+					    
+					    get-button "Add..." | click
+					    with [get-window "Add directory path"] {
+					        get-editbox -after [get-label "Directory:"] | set-text "${workspace_loc:/${ProjName}/src/!test/unity}"
+					        get-button OK | click
+					    }
+
+					    //---------------------------------------------
+					    if [$moduleName | eq "r_sci_rx"]{
+							get-button "Add..." | click
+						    with [get-window "Add directory path"] {
+						        get-editbox -after [get-label "Directory:"] | set-text "${workspace_loc:/${ProjName}/src/!test/stub}"
+						        get-button OK | click
+						    }
+   						}
+   						
+   						//---------------------------------------------
+   						if [or [$moduleName | eq "r_sci_rx"] [$moduleName | eq "r_dtc_rx"] [$moduleName | eq "r_gpio_rx"] [$moduleName | eq "r_lvd_rx"] [$moduleName | eq "r_dmac_rx"]]{
+				    
+						    get-button "Add..." | click
+						    with [get-window "Add directory path"] {
+						        get-editbox -after [get-label "Directory:"] | set-text [format "${workspace_loc:/${ProjName}/src/smc_gen/%s/src/targets/%s}" $moduleName $targetDirectory]
+						        get-button OK | click
+						    }
+
+   						}
+   						
+   						
+   						//---------------------------------------------
+   						
+   						if [ $moduleName | eq "r_irq_rx"]{
+							get-button "Add..." | click
+						    with [get-window "Add directory path"] {
+						        get-editbox -after [get-label "Directory:"] | set-text "${workspace_loc:/${ProjName}/src/!test/inc}"
+						        get-button OK | click
+						    }							
+   						}
+   						
+   						
+   						get-button "Apply and Close" | click
+					    if [get-window ".*" | get-property title -raw | equals "Settings"]{
+					    	get-window "Settings" | get-button Yes | click
+					    }
+					    
+   					}
+}
+
+proc "move-test-to-workspace" {
+	get-view "Project Explorer" | get-tree | select [format "%s.*/src/%s.c" $projectName $projectName ] | get-menu -path Delete | click
+	get-window "Delete Resources" | get-button OK | click
+	copy-file -source $FolderTest -destination [format "workspace:/%s/src/" $projectName] -name "\!test"
+	
+	if [ $moduleName | eq "r_sci_rx"]{
+		get-view "Project Explorer" | get-tree | select [format "%s.*/src/smc_gen/r_byteq" $projectName] | get-menu -path "Resource Configurations/Exclude from Build..." | click
+		if [get-window "Exclude from build" | get-table | get-item -path Debug | get-property checked -raw | equals false]{
+			with [get-window "Exclude from build"] {
+	   			get-table | get-item -path Debug | check
+	   			get-button OK | click
+			}
+		}-else{
+	    	get-window "Exclude from build" | get-button Cancel | click
+	    }
+    }
+	wait 5000
+}					
+------=_.ecl.context-718f04b4-ed39-33e3-af62-0995e4561998--

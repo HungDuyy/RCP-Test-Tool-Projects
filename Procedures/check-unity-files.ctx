@@ -1,0 +1,49 @@
+--- RCPTT testcase ---
+Format-Version: 1.0
+Context-Type: org.eclipse.rcptt.ctx.ecl
+Element-Name: check-unity-files
+Element-Type: context
+Element-Version: 2.0
+Id: _LHG-QHRpEeiQLabVBmPqjQ
+Runtime-Version: 2.4.3.201909171500
+Save-Time: 1/7/20 10:52 AM
+
+------=_.ecl.context-718f04b4-ed39-33e3-af62-0995e4561998
+Content-Type: text/ecl
+Entry-Name: .ecl.context
+
+proc "get-unity-files" [val file] {
+	global [val files [list]] -override
+	
+	let [val table [read-csv-file $file]] {
+		global [val files [$files | append [$table | get columns]]] -override
+		
+		$table | list [get rows] | each [val row] {
+			let [val file [$row | list [get values] | get 0]] {
+				global [val files [$files | append $file]] -override
+			}
+		}
+	}
+	
+	$files
+}
+
+proc "check-unity-files" [val file] {
+	report-start "Check Unity files"
+	
+	try {
+		get-unity-files $file | each [val file] {
+			try {
+				let [val filePath [format "%s/src/!test/unity/%s" $projectPath $file]] {
+					get-view "Project Explorer" | get-tree | get-item -path $filePath
+				}
+			} -catch {
+				report-error [format "Unity file '%s' doesn't exist in the project" $file]
+			}
+		}
+	} -error [val e] -catch {
+		report-error [format "Error while checking unity files: %s" [$e | get-status-message]]
+	}
+	report-end
+}
+------=_.ecl.context-718f04b4-ed39-33e3-af62-0995e4561998--

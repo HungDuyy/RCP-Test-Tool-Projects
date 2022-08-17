@@ -1,0 +1,146 @@
+--- RCPTT testcase ---
+Format-Version: 1.0
+Context-Type: org.eclipse.rcptt.ctx.ecl
+Element-Name: Common_Action
+Element-Type: context
+Element-Version: 2.0
+Id: _3GGREBSxEeqwdYZlXbKnSA
+Runtime-Version: 2.4.3.201909171500
+Save-Time: 2/10/20 2:48 PM
+
+------=_.ecl.context-718f04b4-ed39-33e3-af62-0995e4561998
+Content-Type: text/ecl
+Entry-Name: .ecl.context
+
+proc AUT_CaptureScreen [val imageFolderPath][val imageName]{
+	get-eclipse-window | get-object | save-screenshot [substitute-variables [format "%s/%s.png" $imageFolderPath $imageName]]
+}
+
+proc AUT_CaptureScreen_MaxiView
+	[val imageFolderPath]
+	[val imageName]
+	[val view]
+{
+	get-view $view | maximize
+	get-eclipse-window | get-object | save-screenshot [substitute-variables [format "%s/%s.png" $imageFolderPath $imageName]]
+	wait 2000
+	get-view $view | restore
+}
+
+
+// Confirm the existance of the specified item
+proc FR_SMC__ConfirmItemOnProjectExplorer
+	[val path]
+	[val item]
+{
+	get-view "Project Explorer" 
+		| get-tree | get-item -path [format "%s" $path] | get-property caption | equals [format "%s" $item] | verify-true
+}
+
+proc Remove_BSP {
+	get-editor [format "%s.scfg" $projectName] | get-tab-folder | get-tab-item Components | click	//remove old BSP 
+	with [get-editor [format "%s.scfg" $projectName] | get-section "Com.*"]
+	{
+   	 	get-tree | get-item -path "Startup/Generic/r_bsp" | click
+    	get-button "Remove component" | click
+    	get-window Question | get-button Yes | click
+	}	     
+}
+
+proc Generate_Code {	
+		with [get-editor [format "%s.scfg" $projectName]] {
+	    with [get-button "Generate Code"] {
+	        click
+	    }
+	}
+	  if [get-window ".*" | get-property title -raw | equals "Code Generating"]{
+ 			get-window "Code Generating" | get-button Yes | click
+ 		}
+}
+
+proc Close_scfg {
+	 	try{
+ 			get-editor [format "%s.scfg" $projectName] | close
+ 		}-catch{}
+ 		wait 1000
+		if [get-window ".*" | get-property title -raw | equals "Save Resource"]{
+			get-window "Save Resource" | get-button Save | click
+		}
+}
+
+proc Check_Error {
+//-----------------------------------------------------------------------------------
+	if [get-window ".*" | get-property title -raw | equals "Internal Error"]{
+ 			get-window "Internal Error" | get-button No | click
+ 			wait 2000
+ 			if [get-window ".*" | get-property title -raw | equals "Problem Occurred"]{
+ 				get-window "Problem Occurred" | get-button OK | click
+ 				wait 2000
+ 			}
+ 		}
+ 		if [get-window ".*" | get-property title -raw | equals "Problem Occurred"]{
+ 			get-window "Problem Occurred" | get-button OK | click
+ 			wait 2000
+ 			if [get-window ".*" | get-property title -raw | equals "Internal Error"]{
+ 				get-window "Internal Error" | get-button No | click
+ 				wait 2000
+			}
+ 		}
+ //-----------------------------------------------------------------------------------
+			if [get-window ".*" | get-property title -raw | equals "Save and Launch"]{
+				with [get-window "Save and Launch"] {
+   					get-button "Always save resources before launching" | check
+   					get-button OK | click
+					}
+			}
+			if [get-window ".*" | get-property title -raw | equals "Error"]{
+				get-window "Error" | get-button OK | click
+			}
+ //-----------------------------------------------------------------------------------
+ 			if [get-window ".*" | get-property title -raw | equals "Open Associated Perspective?"]{
+				with [get-window "Open Associated Perspective?"]{
+					get-button "Remember my decision" | check
+					get-button No | click
+				}
+			}
+ //-----------------------------------------------------------------------------------
+ 			if [get-window ".*" | get-property title -raw | equals "Confirm Perspective Switch"]{
+				get-window "Confirm Perspective Switch" | get-button Yes | click
+			}
+ //-----------------------------------------------------------------------------------	
+ 			if [get-window ".*" | get-property title -raw | equals "Launcher"]{
+ 			get-window "Launcher" | get-button Yes | click
+ 			}
+//----------------------------------------------------------------------------------- 			
+ 		if [get-window ".*" | get-property title -raw | equals "Save Resource"]{
+			get-window "Save Resource" | get-button Save | click
+		}
+//----------------------------------------------------------------------------------- Close any window		
+		loop [val i 5]{
+			if[$i | eq 0]{
+			}-else{
+				try {
+					let [val windw [get-window ".*" | get-property title -raw]]{
+						if[$windw | contains "aut-com.renesas"]{
+						}-else{
+							try{
+								get-window $windw | get-button Cancel | click
+							}-catch{}
+						}
+					}
+				}-catch{}
+				recur [ $i | minus 1]
+			}
+		}
+ 		
+}
+
+proc close_project_with_condition {
+try {
+	if [get-view "Project Explorer" | get-tree | get-item -path [format "%s.*" $projectName]  | get-property childCount -raw | equals 0]{
+	}-else {
+    	get-view "Project Explorer" | get-tree | select [format "%s.*" $projectName] | get-menu -path "Close Project" | click
+    }
+	}-catch{}
+}
+------=_.ecl.context-718f04b4-ed39-33e3-af62-0995e4561998--

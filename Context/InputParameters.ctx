@@ -1,0 +1,22 @@
+--- RCPTT testcase ---
+Format-Version: 1.0
+Context-Type: org.eclipse.rcptt.ctx.parameters
+Element-Name: InputParameters
+Element-Type: context
+Element-Version: 2.0
+Id: _KTTdEHgqEeiUh7GEerddGQ
+Runtime-Version: 2.4.3.201909171500
+Save-Time: 1/10/20 2:50 PM
+
+------=_.parameters.context-2e023de5-3294-36a9-ac1d-6701f05a40ee
+Content-Type: text/properties
+Entry-Name: .parameters.context
+
+#Fri Jan 10 14:50:52 ICT 2020
+inputFolder=workspace\:/InputFiles/
+BuildTestTargetFile=Target.xlsx
+buildModuleIncludeDirFile=buildModuleIncludeDir.xlsx
+UnitTestBuildTestTargetFile=Unit_Test_Target.xlsx
+folderStructureFile=folder_structure_each_module.xlsx
+
+------=_.parameters.context-2e023de5-3294-36a9-ac1d-6701f05a40ee--

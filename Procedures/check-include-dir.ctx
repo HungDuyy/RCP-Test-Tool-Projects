@@ -1,0 +1,53 @@
+--- RCPTT testcase ---
+Format-Version: 1.0
+Context-Type: org.eclipse.rcptt.ctx.ecl
+Element-Name: check-include-dir
+Element-Type: context
+Element-Version: 2.0
+Id: _UIX8sHRkEeiQLabVBmPqjQ
+Runtime-Version: 2.4.3.201909171500
+Save-Time: 1/7/20 11:05 AM
+
+------=_.ecl.context-718f04b4-ed39-33e3-af62-0995e4561998
+Content-Type: text/ecl
+Entry-Name: .ecl.context
+
+proc "get-predefined-dirs" [val file] [val sheet] {
+	global [val dirs [list]] -override
+	
+	read-excel-file $file -sheets $sheet | list [get rows] | each [val row] {
+		let [val dir [$row | list [get values] | get 0 | invoke replaceAll "\\/" "\\\\/"]] {
+			global [val dirs [$dirs | append $dir]] -override
+		}
+	}
+	
+	$dirs
+}
+
+proc "check-include-dir" [val file] [val sheet] {
+	report-start "Check Include directory"
+	
+	try {
+		get-view "Project Explorer" | get-tree | select $projectPath | get-menu -path Properties | click
+		with [get-window "Properties for .*"] {
+			get-tree | select "C\\/C++ General/Paths and Symbols"
+			get-tab-folder |get-tab-item Includes | click
+		}
+
+		get-predefined-dirs $file $sheet | each [val dir] {
+			try {
+				get-window "Properties for .*" | get-table | get-item -path $dir
+			} -catch {
+				report-error [format "Directory '%s' doesn't exist in the project" $dir]
+			}
+		}
+		
+		get-window "Properties for .*" | close
+	} -error [val e] -catch {
+		try { get-window "Properties for .*" | close } -catch { }
+		report-error [format "Error while checking include directory: %s" [$e | get-status-message]]
+	}
+	report-end
+}
+
+------=_.ecl.context-718f04b4-ed39-33e3-af62-0995e4561998--

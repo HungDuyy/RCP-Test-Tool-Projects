@@ -1,43 +1,50 @@
 --- RCPTT testcase ---
 Format-Version: 1.0
-Contexts: _buzfMLFEEei9kbuBBJwibA,_vfVb4HRmEeiQLabVBmPqjQ,_KTTdEHgqEeiUh7GEerddGQ,_IXScUHgqEeiUh7GEerddGQ,_kRRA8HRmEeiQLabVBmPqjQ,_WhrJgHXcEeiSluh8YCOfjA,_vW6a8BpbEequd5J9yLLTvQ,_hsBGUBpdEequd5J9yLLTvQ,_3GGREBSxEeqwdYZlXbKnSA
+Contexts: _QTw_gCFMEeqhGNdl-82c2g,_buzfMLFEEei9kbuBBJwibA,_KTTdEHgqEeiUh7GEerddGQ,_IXScUHgqEeiUh7GEerddGQ,_kRRA8HRmEeiQLabVBmPqjQ,_WhrJgHXcEeiSluh8YCOfjA,_hsBGUBpdEequd5J9yLLTvQ,_3GGREBSxEeqwdYZlXbKnSA
 Element-Name: BuildTestGCC
 Element-Type: testcase
 Element-Version: 3.0
 External-Reference: 
 Id: _sYbaYBTmEeqiSM6lVcPHLA
 Runtime-Version: 2.4.3.201909171500
-Save-Time: 12/17/19 6:14 PM
+Save-Time: 1/20/20 6:53 PM
 Testcase-Type: ecl
 
 ------=_.content-0a7243a0-75d3-3d5f-9791-539de0e5b7ac
 Content-Type: text/ecl
 Entry-Name: .content
 
-
 // input parameters
 global	[val BuildTestTargetFile [concat $inputFolder $BuildTestTargetFile]]
-		[val includeDirFile [concat $inputFolder $includeDirFile]] 
-		[val buildModuleNamesFile [concat $inputFolder $buildModuleNamesFile]]
 		[val folderStructureFile [concat $inputFolder $folderStructureFile]]
 		[val buildModuleIncludeDirFile [concat $inputFolder $buildModuleIncludeDirFile]]
+		[val buildConsole $buildConsoleFile]
+		[val cleanConsole $cleanConsoleFile]
+		[val ErrorWarning $ErrorWarningLogs]
 		[val currentTime [get-time]]
+		[val projectName ""]
 		-override
-global 	[val bsp_version 	  [read-excel-file $BuildTestTargetFile "bsp_path" | get-table-cells B1]]
-		[val outputFolderGCC  [read-excel-file $BuildTestTargetFile "bsp_path" | get-table-cells B3]]
-		-override
+global 	[val outputFoldergc  [read-excel-file $BuildTestTargetFile "outputFolder" | get-table-cells B2]] -override
 // output parameters
-//global	[val outputFolder [format $outputFolder [substitute-variables "${system_property:user.home}" | invoke replaceAll "\\\\" "\\/" | invoke replaceAll " " "%20"]]] -override
-global	[val summaryReportFile [concat $outputFolderGCC $summaryReportFile]] -override
-
+global	[val summaryReportFile [concat $outputFoldergc $summaryReportFile]] -override
 read-each-target $BuildTestTargetFile "targetdevice" | each [val target] {
-if [ $target | get 0 | eq targetDevice] {
-}-else{
-
-	get-module-names-with-versions $buildModuleNamesFile | each [val module] {	
-
-		global 	[val projectName [create-new-project-GCC [$target | get 3] [$target | get 0] [$target | get 2] [$target | get 1] [$module | get 0]]] -override
-		wait 2000
+ if [ $target | get 0 | eq targetDevice] {
+ }-else{
+  global [val outputFolderGCC [format "%s%s/" $outputFoldergc [$target | get 0] ]] -override
+  read-each-bsp $BuildTestTargetFile "bsp_version" | each [val bsp_version] {
+   if [$bsp_version | get 0 | eq bsp_version] {
+   }-else{
+	read-each-module $BuildTestTargetFile "buildModuleNames" | each [val module] {
+	  if [ $module | get 0 | eq ModuleName] {
+      }-else{
+		Check_Error
+		close_project_with_condition
+		global  [val ModuleName [$module | get 0]] -override
+		if [ $ModuleName | eq "r_dmac_rx"]{
+      		global  [val ModuleName "r_dmaca_rx"] -override
+      	}
+		global 	[val projectName [create-new-project-GCC_SC [$target | get 3] [$target | get 0] [$target | get 2] [$target | get 1] $ModuleName [$bsp_version | get 0]]] -override
+		Check_Error
 		global 	[val summary [format "[%s] [%s]\n\n" [$currentTime | format-time "yyyy-MM-dd HH:mm:ss"] $projectName]] -override
 		global	[val projectPath [format "%s.*" $projectName]] -override
     	
@@ -53,17 +60,20 @@ if [ $target | get 0 | eq targetDevice] {
 					{
 						delete-file $outputFolder
 					}
-					Remove_BSP $projectName
-					Generate_Code $projectName
+					Check_Error	
+					Remove_BSP
+					Generate_Code
 					display-blocked-FIT
-					add-module $projectName "r_bsp" $bsp_version //add BSP with bsp_version
-					add-module $projectName  [$module | get 0] [substitute-variables [$module | get 1] | invoke replaceAll "v" ""]
-					Generate_Code $projectName
-					check-module-version [$module | get 0] [$module | get 1]
-					//check-include-dir $buildModuleIncludeDirFile [$module | get 0]
-					//check-folder-structure $projectName [$module | get 0]
-					clean-project $cleanConsoleFile
-					build-project $buildConsoleFile $ErrorWarningLogs
+					add-module "r_bsp" [substitute-variables [$bsp_version | get 0] | invoke replaceAll "v" ""] //add BSP with bsp_version
+					Check_Error	
+					add-module $ModuleName [substitute-variables [$module | get 1] | invoke replaceAll "v" ""]
+					Generate_Code
+					Close_scfg
+					Check_Error	
+					//check-include-dir $buildModuleIncludeDirFile $ModuleName
+					//check-folder-structure $projectName $ModuleName
+					clean-project $cleanConsoleFile $cleanConsole
+					build-project $buildConsoleFile $buildConsole $ErrorWarningLogs
 					save-and-export
 					} -error [val e] -catch
 						{
@@ -74,8 +84,10 @@ if [ $target | get 0 | eq targetDevice] {
 							}
 			}
 		}
-	}
+     }
+    }
+   }
+  }
+ }
 }
-}
-
 ------=_.content-0a7243a0-75d3-3d5f-9791-539de0e5b7ac--

@@ -1,0 +1,116 @@
+--- RCPTT testcase ---
+Format-Version: 1.0
+Context-Type: org.eclipse.rcptt.ctx.ecl
+Element-Name: tests
+Element-Type: context
+Element-Version: 2.0
+Id: _DIYNINiCEei2dtjAhNdCog
+Runtime-Version: 2.4.3.201909171500
+Save-Time: 1/21/20 1:12 PM
+
+------=_.ecl.context-718f04b4-ed39-33e3-af62-0995e4561998
+Content-Type: text/ecl
+Entry-Name: .ecl.context
+
+proc "off-code-analysis"{
+
+	try -times 100 -delay 500 -command {//close Install window
+		if [get-window ".*" | get-property title -raw | equals "Install"]{
+			get-window "Install" | get-button Cancel | click
+		}
+	}
+
+	get-view "Project Explorer" | get-tree | select [format "%s.*" $projectName] | get-menu -path Properties | click
+	with [get-window [format "Properties for %s" $projectName ]] {
+    get-tree | select "C\\/C\\+\\+ General/Code Analysis "
+    get-button "Use project settings" | click
+   		with [get-tree -after [get-label Problems]] {
+	        get-item -path "Coding Style" | uncheck
+	        get-item -path "Potential Programming Problems" | uncheck
+	        get-item -path "Security Vulnerabilities" | uncheck
+	        get-item -path "Syntax and Semantic Errors" | uncheck
+  		}
+   		get-button "Apply and Close" | click
+	}
+}
+
+proc "unit-test" {
+	//check-versions
+	//check-include-dir $includeDirFile $projectName
+	//check-unity-files $unityFile
+	set-toolchain
+	clean-project $cleanConsoleFile $cleanConsole
+	build-project $buildConsoleFile $buildConsole $ErrorWarningLogs
+	debug-New-project
+	Check_Error
+	clear-console
+	get-line-number-with-subline "test_main.c" "UnityMain("
+	set-breakpoint "test_main.c" $secondLine
+	monitor-register
+	setup-coverage
+	resume-debug
+	Check_Error
+	test-coverage $coverageShot $uncoveredLinesFile
+	renesas-console $consoleFile
+	save-and-export
+	stop-debug
+}
+
+proc "static-test" {
+	check-versions
+	check-include-dir $includeDirFile $projectName
+	check-unity-files $unityFile
+
+	try {
+		set-toolchain
+		clean-project $cleanConsoleFile
+	
+		global [val expectedDevice [check-mcu-group "BSP_CFG_MCU_PART_GROUP" $productName]] -override
+		global [val packageMacroNames [check-mcu-package "BSP_CFG_MCU_PART_PACKAGE" $productName "/src/smc_gen/r_config/r_bsp_config.h" [format "/src/smc_gen/r_bsp/mcu/%s/mcu_info.h" $productName]]] -override
+		
+		global [val bspMacroNames [list]] -override
+		if [is-check $projectName] {
+			global [val bspMacroNames [check-BSP-ALL $productName]] -override
+		}
+
+		compare-mot-files
+	
+		check-after-build "test_main" $packageMacroNames $expectedDevice $bspMacroNames
+		build-project $buildConsoleFile
+
+	} -error [val e] -catch {
+		report-test-error $e
+	} -finally {
+		report-summary
+	}
+}
+
+proc "integration-test" {
+	check-versions
+	check-include-dir $includeDirFile $projectName
+	check-unity-files $unityFile
+
+	try {
+		set-toolchain
+		clean-project $cleanConsoleFile
+		build-project $buildConsoleFile
+
+		hardware-debug-project
+		clear-console
+
+		get-view ".*Renesas Debug Virtual Console" | click -arrow
+		resume-debug-waiting-for-completion
+		capture-console $consoleFile
+
+		check-version-from-GetVersion-API $getVersionFile
+
+	} -error [val e] -catch {
+		report-test-error $e
+	} -finally {
+		stop-debug
+		report-summary
+	}
+}
+
+
+------=_.ecl.context-718f04b4-ed39-33e3-af62-0995e4561998--

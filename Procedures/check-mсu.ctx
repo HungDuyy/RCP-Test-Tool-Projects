@@ -1,0 +1,237 @@
+--- RCPTT testcase ---
+Format-Version: 1.0
+Context-Type: org.eclipse.rcptt.ctx.ecl
+Element-Name: check-mсu
+Element-Type: context
+Element-Version: 2.0
+Id: _-4SGYIpgEei-Vt-7RVrfYA
+Runtime-Version: 2.4.3.201909171500
+Save-Time: 1/7/20 10:52 AM
+
+------=_.ecl.context-718f04b4-ed39-33e3-af62-0995e4561998
+Content-Type: text/ecl
+Entry-Name: .ecl.context
+
+proc "check-mcu-group" [val keyWord] [val prodName] {
+	report-start "Check MCU group"
+
+	try {
+		read-excel-file $inputStaticTest "Static Test MCU group" | list [get rows] | each [val row] {
+			let [val values [$row | list [get values]]] {
+				if [$values | get 0 | eq [$prodName | invoke toUpperCase]] {
+					global [val expectedPartGroup [$values | get 1]] -override
+					global [val expectedDevice [$values | get 2]] -override
+					throw-error "Device is founded"
+				}
+			}
+		}
+		throw-error [format "Device %s is not founded in input file" $prodName]
+	} -error [val ej] -catch {
+		if [$ej | get-status-message | not-eq "Device is founded"] {
+			throw-error [$ej | get-status-message]
+		}
+	}
+
+	get-view "Project Explorer" | get-tree | select [format "%s.*/src/smc_gen/r_config/r_bsp_config.h" $projectName] | double-click
+	let [val partGroup [get-defined-value [get-editor "r_bsp_config.h" | get-text-viewer | get-property text -raw] $keyWord | get 1]] {
+		if [$partGroup | eq $expectedPartGroup] {
+			report-message [format "Correct %s define value %s in r_bsp_config.h." $keyWord $expectedPartGroup]
+		} -else {
+			report-error [format "Incorrect %s define value in r_bsp_config.h. Expected %s, but was %s." $keyWord $expectedPartGroup $partGroup]
+		}
+	}
+
+	get-view "Project Explorer" | get-tree | select [format "%s.*/src/smc_gen/r_bsp/mcu/%s/mcu_info.h" $projectName $prodName]
+		| double-click
+	let [val parser [find-single-match [get-editor "mcu_info.h" | get-text-viewer | get-property text -raw] [format
+		"#if\\W*\\(%s\\W*==\\W*(\\w*)\\W*\\)\\W*define\\W+(\\w+)\\W+\\((\\w+)\\)" $keyWord]]] {
+		if [$parser | get 1 | eq $expectedPartGroup] {
+			report-message [format "Correct %s define value %s in mcu_info.h." $keyWord $expectedPartGroup]
+		} -else {
+			report-error [format "Incorrect %s define value in mcu_info.h. Expected %s, but was %s." $keyWord $expectedPartGroup [$parser | get 1]]
+		}
+
+		if [$parser | get 2 | eq $expectedDevice] {
+			report-message [format "Correct define device %s." $expectedDevice]
+		} -else {
+			report-error [format "Incorrect define device. Expected %s, but was %s." $expectedDevice [$parser | get 2]]
+		}
+	}
+	report-end
+	$expectedDevice
+}
+
+proc "get-defined-value" [val text] [val keyWord] {
+	find-single-match $text [format "#define\\W+%s\\W+\((\w+)\)" $keyWord]
+}
+
+proc "find-single-match" [val text] [val regex] {
+	let [val groups [find-all $text $regex | to-list]] {
+		if [$groups | get-list-size | not-eq 1] {
+			if [$groups | invoke getElements | invoke size | eq 0] {
+				throw-error [format "'%s' wasn't found" $regex]
+			} -else {
+				throw-error [format "'%s' was found too many times" $regex]
+			}
+		}
+		$groups | get 0
+	}
+}
+
+proc "check-mcu-package" [val keyWord] [val prodName] [val config_file] [val info_file] {
+	report-start "Check MCU package"
+
+	get-view "Project Explorer" | get-tree | select [format "%s.*%s" $projectName $config_file] | double-click
+	let [val package [get-defined-value [get-editor "r_bsp_config.h" | get-text-viewer | get-property text -raw] $keyWord | get 1]] {
+		report-message [format "%s define value %s" $keyWord $package]
+
+		global [val macroNames [list]] -override
+		global [val macroValues [list]] -override
+
+		global [val deviceIsFounded false] -override
+		global [val packageIsFounded false] -override
+		try {
+			read-excel-file $inputStaticTest "Static Test MCU Package" | list [get rows] | each [val row] {
+				let [val values [$row | list [get values]]] {
+					if [$values | get 0 | not-eq ""] {
+						if [$values | get 0 | eq [$prodName | invoke toUpperCase]] {
+							global [val deviceIsFounded true] -override
+						} -else {
+							global [val deviceIsFounded false] -override
+						}
+					}
+					if [$deviceIsFounded] {
+						if [$values | get 1 | not-eq ""] {
+							if [$values | get 1 | eq $package] {
+								global [val packageIsFounded true] -override
+							} -else {
+								global [val packageIsFounded false] -override
+							}
+						}
+						if [and $packageIsFounded [$values | get 2 | not-eq ""]] {
+							global [val macroNames [$macroNames | append [$values | get 2 | find-all "\\w*" | get 0]]] -override
+							global [val macroValues [$macroValues | append [$values | get 3 | find-all "\\w*" | get 0]]] -override
+						}
+					}
+				}
+			}
+		} -error [val e] -catch {
+			if [$e | get-status-message | contains "is out of bounds" | not] {
+				throw-error [$e | get-status-message]
+			}
+		}
+
+		get-view "Project Explorer" | get-tree | select [format "%s.*%s" $projectName $info_file] | double-click
+
+		let [val values [find-single-match [get-editor "mcu_info.h" | get-text-viewer | get-property text -raw] [format
+			"#(?:el){0,1}if\\W+\(\\W*%s\\W*==\\W*%s\\W*\)\\W+#define\\W+(\\w+)\\W+\((\\w+)\)\\W+#define\\W+(\\w+)\\W+\((\\w+)\)" $keyWord $package]]] {
+			check-on-defined-value [$values | get 1] [$values | get 2]
+			check-on-defined-value [$values | get 3] [$values | get 4]
+		}
+	}
+	report-end
+	let [val packageMacroNames [list $macroNames $macroValues]] {
+		$packageMacroNames
+	}
+}
+
+proc "check-on-defined-value" [val name] [val value] {
+	try {
+		$macroNames | each [val n] [val i] {
+			if [$n | eq $name] {
+				if [$macroValues | get $i | eq "NA"] {
+					report-message [format "%s defined" $name]
+				} -else {
+					if [$macroValues | get $i | eq $value] {
+						report-message [format "Correct %s define value %s" $name $value]
+					} -else {
+						report-error [format "Incorrect %s define value. Expected %s, but was %s" $name [$macroValues | get $i] $value]
+					}
+				}
+				throw-error "checked"
+			}
+		}
+		throw-error "unchecked"
+	}-error [val e] -catch {
+		if[$e | get-status-message | not-eq "checked"]{
+			throw-error [format "define name %s not founded in input file" $name]
+		}
+	}
+}
+
+proc "check-BSP-ALL" [val prodName] {
+	report-start "Check BSP_MCU_***"
+	get-view "Project Explorer" | get-tree | select [format "%s.*/src/smc_gen/r_bsp/mcu/%s/mcu_info.h" $projectName $prodName] | double-click
+
+	global [val nextDefine [bool true]] -override
+	let [val device [find-single-match -text [get-editor "mcu_info.h" | get-text-viewer | get-property text -raw] -regex "\n#define\\W+(BSP\\w+)\\W+\(1\)" | get 1]] {
+		get-editor "mcu_info.h" | close
+		read-excel-file $inputStaticTest "Static Test Macro List" | list [get rows] | each [val row] {
+			let [val values [$row | list [get values]]] {
+				try {
+					if [$values | get 0 [bool false] | eq Devices] {
+						if [not $nextDefine] {
+							report-error [format "Device %s not founded in input file" $device]
+						}
+						global [val nextDefine [bool false]] -override
+					} -else {
+						if [not $nextDefine] {
+							if [or 	[and [$values | get 0 | matches "BSP\\w+"] [$values | get 0 | eq $device]] 
+									[$values | get 0 | matches else]] {
+								get-view "Project Explorer" | get-tree | select [format "%s.*%s" $projectName $checkBspAllFile] | double-click
+								global [val bspMacroNames [$bspMacroNames | append [list [$values | get 1] [$values | get 2]]]] -override
+								let [val actValue [find-single-match -text [get-editor [$checkBspAllFile | split "/" | to-list | get-last] | get-text-viewer | get-property text -raw] -regex [format 
+								"(?:#(?:el)?if\\W+(?:defined\(\\w*\)\\W+)*defined\(%s\)\\W+(?:defined\(\\w*\)\\W+)*|(?:(?:#(?:el)?if\\W+(?:defined\(\\b(?!%s\\b)\\w+\)\\W+)+)#define\\W+%s\\W+\(\\w+\))+\\W+#else\\W+)#define\\W+%s\\W+\((\\w+)\)" $device $device [$values | get 1] [$values | get 1]] | get 1]] {
+									if [$values | get 2 | eq $actValue] {
+										report-message [format "Correct define %s value %s for %s." [$values | get 1] [$values | get 2] $device]
+									} -else {
+										report-error [format "Incorrect define %s for %s. Expected %s, but was %s." [$values | get 1] $device [$values | get 2] $actValue]
+									}
+								}
+								global [val nextDefine [bool true]] -override
+							}
+						}
+					}
+				} -catch {}
+			}
+		}
+		if [not $nextDefine] {
+			report-error [format "Device %s not founded in input file" $device]
+		}
+	}
+	report-end
+	$bspMacroNames
+}
+
+proc "get-module-names" [val file] {
+	global [val names [list]] -override
+
+	let [val table [read-csv-file $file]] {
+		global [val names [$names | append [$table | get columns]]] -override
+
+		$table | list [get rows] | each [val row] {
+			let [val name [$row | list [get values] | get 0]] {
+				global [val names [$names | append $name]] -override
+			}
+		}
+	}
+
+	$names
+}
+
+proc "is-check" [val module] {
+	global [val yes false] -override
+	try {
+		get-module-names $staticModuleNamesFile | each [val name] {
+			if [$module | eq $name] {
+				global [val yes true] -override
+				throw-error
+			}
+		}
+	} -error [val e] -catch {
+	}
+
+	$yes
+}
+
+------=_.ecl.context-718f04b4-ed39-33e3-af62-0995e4561998--
